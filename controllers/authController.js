@@ -3,12 +3,14 @@ const { User, Session } = require("../models");
 const clerkHelper = require("../services/clerkHelper");
 
 exports.checkTokenSocket = async (socket, token) => {
+  console.log("initoken" + token);
   try {
     // Here, you would typically verify the token and perform necessary operations
     // For example, you might decode the token to extract user information
     // and update some socket-related data.
     if (!token) {
-      return socket.emit("checkUserToken", {
+      console.log("gak ketemu");
+      return socket.emit("checkUserTokenRes", {
         status: 401,
         message: "No token provided. Please authenticate.",
       });
@@ -17,7 +19,7 @@ exports.checkTokenSocket = async (socket, token) => {
     const session = await Session.findOne({
       where: { token, isValid: true },
     });
-
+    console.log("ketemu");
     if (!session) {
       throw new Error("Invalid session or session has expired");
     }
@@ -25,7 +27,7 @@ exports.checkTokenSocket = async (socket, token) => {
     const user = await User.findByPk(session.userId);
 
     if (!user) {
-      return socket.emit("checkUserToken", {
+      return socket.emit("checkUserTokenRes", {
         status: 404,
         message: "session not found or invalid",
       });
@@ -34,16 +36,14 @@ exports.checkTokenSocket = async (socket, token) => {
     // Update user socket information
     clerkHelper.updateUserSocketId(user, socket.id);
 
-    return socket.emit("checkUserToken", {
+    return socket.emit("checkUserTokenRes", {
       status: 200,
       message: "checking token success",
-      data: { user: req.user, valid: true },
+      data: { user: user, valid: true },
     });
-    // Emit response back to the client through socket if needed
-    socket.emit("tokenChecked", { user, valid: true });
   } catch (error) {
     console.error("Error validating token via socket:", error);
-    return socket.emit("checkUserToken", {
+    return socket.emit("checkUserTokenRes", {
       status: 404,
       message: "session checking error",
     });

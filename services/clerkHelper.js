@@ -98,22 +98,42 @@ async function updateUserSocketId(user, newSocketId) {
   try {
     const { userId, roleId, cafeId } = user;
 
-    //for clerk identifying
-    if (roleId == 2) userList.push([userId, roleId, newSocketId, cafeId]);
-    else userList.push([userId, roleId, newSocketId, null]);
+    // Check if userId already exists in userList
+    const index = userList.findIndex((entry) => entry[0] === userId);
 
-    console.log(
-      `User with socketId ${newSocketId} found and added to userList.`,
-    );
-    if (roleId == 2) {
-      const session = guestSideList.find((session) => session[0] === clerkId);
-      if (session) {
-        session[1] = newSocketId;
+    if (index !== -1) {
+      // Update existing entry
+      userList[index] = [
+        userId,
+        roleId,
+        newSocketId,
+        roleId === 2 ? cafeId : null,
+      ];
+      console.log(`User with userId ${userId} updated in userList.`);
+    } else {
+      // Add new entry
+      if (roleId === 2) {
+        userList.push([userId, roleId, newSocketId, cafeId]);
+      } else {
+        userList.push([userId, roleId, newSocketId, null]);
+      }
+      console.log(`User with userId ${userId} added to userList.`);
+    }
+
+    // Update guestSideList if roleId is 2 (assuming clerkId is defined somewhere)
+    if (roleId === 2) {
+      const sessionIndex = guestSideList.findIndex(
+        (session) => session[0] === userId,
+      );
+      if (sessionIndex !== -1) {
+        guestSideList[sessionIndex][1] = newSocketId;
       }
     }
+
+    console.log("Updated userList:");
     console.log(userList);
   } catch (error) {
-    console.error("Error finding user:", error);
+    console.error("Error updating user socketId:", error);
     return false;
   }
 }

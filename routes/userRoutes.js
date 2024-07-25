@@ -4,23 +4,9 @@ const userController = require("../controllers/userController");
 const auth = require("../middlewares/auth");
 const { checkCafeOwnership } = require("../middlewares/checkCafeOwnership");
 const router = express.Router();
-const { io } = require("../index");
 
 // Auth routes
-//checking token is from socket
-io.on("connection", (socket) => {
-  console.log("A user connected");
-
-  // Example event to handle token check
-  socket.on("checkUserToken", (token) => {
-    authController.checkTokenSocket(socket, token);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected");
-    // Handle disconnect logic if needed
-  });
-});
+//checking token is through socket, in index.js
 
 router.post("/login", authController.login);
 router.post("/logout", auth([]), authController.logout);

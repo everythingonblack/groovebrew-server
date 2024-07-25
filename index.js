@@ -30,6 +30,7 @@ const cafeRoutes = require("./routes/cafeRoutes");
 const itemRoutes = require("./routes/itemRoutes");
 const tableRoutes = require("./routes/tableRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
+const authController = require("./controllers/authController");
 
 const { User, Cafe, Session } = require("./models");
 
@@ -70,8 +71,6 @@ io.on("connection", async (socket) => {
     });
   });
 
-  module.exports.io = io;
-
   socket.on("read_qrCode", async ({ qrCode, token }) => {
     const qrCodeData = clerkHelper.getSocketIdAndShopIdByQRCode(qrCode);
     if (qrCodeData) {
@@ -111,6 +110,11 @@ io.on("connection", async (socket) => {
     } else {
       console.log(`No socket found for QR code ${qrCode}`);
     }
+  });
+
+  socket.on("checkUserToken", async ({ token }) => {
+    console.log(`trying to check token`);
+    await authController.checkTokenSocket(socket, token);
   });
 
   socket.on("checkGuestSideToken", async (data) => {
@@ -544,6 +548,7 @@ app.use("/table", tableRoutes);
 app.use("/transaction", transactionRoutes);
 
 const PORT = process.env.PORT || 5000;
+
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

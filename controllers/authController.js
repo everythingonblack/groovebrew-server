@@ -2,14 +2,51 @@ const bcrypt = require("bcrypt");
 const { User, Session } = require("../models");
 const clerkHelper = require("../services/clerkHelper");
 
-// Endpoint to check the validity of the token
-exports.checkToken = async (req, res) => {
+exports.checkTokenSocket = async (socket, token) => {
   try {
-    clerkHelper.updateUserSocketId(req.user, req.body.socketId);
-    res.status(200).send({ user: req.user, valid: true });
+    // Here, you would typically verify the token and perform necessary operations
+    // For example, you might decode the token to extract user information
+    // and update some socket-related data.
+    if (!token) {
+      return socket.emit("checkUserToken", {
+        status: 401,
+        message: "No token provided. Please authenticate.",
+      });
+    }
+
+    const session = await Session.findOne({
+      where: { token, isValid: true },
+    });
+
+    if (!session) {
+      throw new Error("Invalid session or session has expired");
+    }
+
+    const user = await User.findByPk(session.userId);
+
+    if (!user) {
+      return socket.emit("checkUserToken", {
+        status: 404,
+        message: "session not found or invalid",
+      });
+    }
+
+    // Update user socket information
+    clerkHelper.updateUserSocketId(user, socket.id);
+
+    return socket.emit("checkUserToken", {
+      status: 200,
+      message: "checking token success",
+      data: { user: req.user, valid: true },
+    });
+    // Emit response back to the client through socket if needed
+    socket.emit("tokenChecked", { user, valid: true });
   } catch (error) {
-    console.error("Error validating token:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Error validating token via socket:", error);
+    return socket.emit("checkUserToken", {
+      status: 404,
+      message: "session checking error",
+    });
   }
 };
 

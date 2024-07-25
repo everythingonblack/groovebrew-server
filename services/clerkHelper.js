@@ -111,6 +111,7 @@ async function updateUserSocketId(user, newSocketId) {
         session[1] = newSocketId;
       }
     }
+    console.log(userList);
   } catch (error) {
     console.error("Error finding user:", error);
     return false;

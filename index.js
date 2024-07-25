@@ -70,6 +70,8 @@ io.on("connection", async (socket) => {
     });
   });
 
+  module.exports.io = io;
+
   socket.on("read_qrCode", async ({ qrCode, token }) => {
     const qrCodeData = clerkHelper.getSocketIdAndShopIdByQRCode(qrCode);
     if (qrCodeData) {
@@ -123,10 +125,13 @@ io.on("connection", async (socket) => {
     }
 
     // Verify guest side session
-    const sessionData = clerkHelper.verifyGuestSideSession(token, socket.id);
+    const sessionData = await clerkHelper.verifyGuestSideSession(
+      token,
+      socket.id,
+    );
 
     // Check if sessionData is null (session not found or invalid)
-    if (!sessionData) {
+    if (sessionData == null) {
       return socket.emit("checkGuestSideTokenRes", {
         status: 404,
         message: "Guest side session not found or invalid",
@@ -137,11 +142,13 @@ io.on("connection", async (socket) => {
     // Example: Set session or perform additional actions based on sessionData
 
     // Respond with success or additional data if needed
-    socket.emit("checkGuestSideTokenRes", {
-      status: 200,
-      message: "Guest side session verified successfully",
-      sessionData,
-    });
+    if (sessionData != null) {
+      socket.emit("checkGuestSideTokenRes", {
+        status: 200,
+        message: "Guest side session verified successfully",
+        sessionData,
+      });
+    }
   });
 
   socket.on("join-room", async (data) => {
@@ -311,13 +318,15 @@ app.post("/removeConnectedGuestsSides", async (req, res) => {
   if (!rm)
     return res.status(404).json({ error: "side session not found or invalid" });
 
-  io.sockets.sockets
-    .get(rm.previousGuestSideSocket)
-    .emit("signout-guest-session");
-  res.status(200).json({
-    message: "removing Guest side session successfully",
-    guestSideList: rm.guestSideList,
-  });
+  try {
+    io.sockets.sockets
+      .get(rm.previousGuestSideSocket)
+      .emit("signout-guest-session");
+    res.status(200).json({
+      message: "removing Guest side session successfully",
+      guestSideList: rm.guestSideList,
+    });
+  } catch {}
 });
 
 //spotify login endpoint, for clerk

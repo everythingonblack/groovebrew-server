@@ -138,14 +138,15 @@ exports.transactionFromClerk = async (req, res) => {
   }
 };
 
-exports.transactionFromGuestDevice = async (req, res) => {
+exports.transactionFromGuestSide = async (req, res) => {
   //userId is guest who transacte
   const { cafeId } = req.params;
 
   const cafe = await Cafe.findByPk(cafeId);
   if (!cafe) return res.status(404).json({ error: "Cafe not found" });
 
-  const { payment_type, serving_type, tableNo, transactions } = req.body;
+  const { user_email, payment_type, serving_type, tableNo, transactions } =
+    req.body;
 
   let paymentType = payment_type === "cash" ? "cash" : "cashless";
   let servingType = serving_type === "pickup" ? "pickup" : "serve";
@@ -160,11 +161,116 @@ exports.transactionFromGuestDevice = async (req, res) => {
     tableId = table.tableId;
   }
 
+  let userEmail = user_email !== null ? user_email : "null";
+  if (userEmail != "null" && !isValidEmail(userEmail)) {
+    return res.status(400).json({ error: "Invalid email format" });
+  }
+
   let userId;
   if (!req.user) {
     // Create user with a default password
     const newUsername = await generateUniqueUsername();
     const newUser = await User.create({
+      email: userEmail,
+      username: newUsername,
+      password: "unsetunsetunset",
+      roleId: 3,
+    });
+    userId = newUser.userId;
+  } else {
+    userId = req.user.userId;
+  }
+
+  try {
+    await sequelize.transaction(async (t) => {
+      // Create the main transaction record
+      const newTransaction = await Transaction.create(
+        {
+          userId: userId,
+          cafeId: cafeId,
+          payment_type: paymentType,
+          serving_type: servingType,
+          confirmed: false,
+          tableId: servingType === "serve" ? tableId : null,
+          is_paid: paymentType === "cash" ? true : false,
+        },
+        { transaction: t },
+      );
+
+      // Create detailed transaction records
+      const detailedTransactions = transactions.items.map(async (item) => {
+        await DetailedTransaction.create(
+          {
+            transactionId: newTransaction.transactionId,
+            itemId: item.itemId,
+            qty: item.qty,
+          },
+          { transaction: t },
+        );
+      });
+
+      await Promise.all(detailedTransactions);
+
+      if (!req.user) {
+        const token = generateToken();
+        await Session.create({ userId: userId, token }, { transaction: t });
+      } else if (user.password === "unsetunsetunset") {
+        // Send email to complete registration
+        const token = generateToken();
+        await Session.create({ userId: userId, token }, { transaction: t });
+        await sendEmail(
+          req.user.email,
+          cafe,
+          "completeRegistration",
+          transactions.items,
+          token,
+        );
+      }
+    });
+
+    clerkHelper.sendMessageToAllClerk(cafeId, "transaction_created");
+
+    res.status(201).json({ message: "Transactions created successfully" });
+  } catch (error) {
+    console.error("Error creating transactions:", error);
+    res.status(500).json({ message: "Failed to create transactions" });
+  }
+};
+
+exports.transactionFromGuestDevice = async (req, res) => {
+  //userId is guest who transacte
+  const { cafeId } = req.params;
+
+  const cafe = await Cafe.findByPk(cafeId);
+  if (!cafe) return res.status(404).json({ error: "Cafe not found" });
+
+  const { user_email, payment_type, serving_type, tableNo, transactions } =
+    req.body;
+
+  let paymentType = payment_type === "cash" ? "cash" : "cashless";
+  let servingType = serving_type === "pickup" ? "pickup" : "serve";
+  let tableId;
+
+  if (tableNo || servingType == "serve") {
+    const table = await Table.findOne({
+      where: { cafeId: cafeId, tableNo: tableNo },
+    });
+    if (!table) return res.status(404).json({ error: "Table not found" });
+
+    tableId = table.tableId;
+  }
+
+  let userEmail = user_email !== null ? user_email : "null";
+  if (userEmail != "null" && !isValidEmail(userEmail)) {
+    return res.status(400).json({ error: "Invalid email format" });
+  }
+
+  let userId;
+  if (!req.user) {
+    // Create user with a default password
+    const newUsername = await generateUniqueUsername();
+    const newUser = await User.create({
+      email: userEmail,
       username: newUsername,
       password: "unsetunsetunset",
       roleId: 3,

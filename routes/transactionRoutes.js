@@ -12,8 +12,11 @@ router.post(
   transactionController.transactionFromClerk,
 );
 router.post(
+  "/fromGuestSide/:cafeId",
+  transactionController.transactionFromGuestSide,
+);
+router.post(
   "/fromGuestDevice/:cafeId",
-  auth([]),
   transactionController.transactionFromGuestDevice,
 );
 module.exports = router;

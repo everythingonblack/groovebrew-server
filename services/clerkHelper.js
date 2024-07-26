@@ -112,12 +112,14 @@ async function updateUserSocketId(user, newSocketId) {
       console.log(`User with userId ${userId} updated in userList.`);
     } else {
       // Add new entry
-      if (roleId === 2) {
+      if (roleId == 2) {
         userList.push([userId, roleId, newSocketId, cafeId]);
       } else {
         userList.push([userId, roleId, newSocketId, null]);
       }
-      console.log(`User with userId ${userId} added to userList.`);
+      console.log(
+        `User with userId ${userId}  and roleId  ${roleId} added to userList.`,
+      );
     }
 
     // Update guestSideList if roleId is 2 (assuming clerkId is defined somewhere)
@@ -139,13 +141,16 @@ async function updateUserSocketId(user, newSocketId) {
 }
 
 function getAllClerk(cafeId) {
-  return userList.filter((user) => user[3] === cafeId);
+  return userList.filter((user) => user[3] == cafeId);
 }
 
 function sendMessageToAllClerk(cafeId, data) {
   // Step 1: Filter userList to get users (clerks) with the specified cafeId
-  const shopClerks = userList.filter((user) => user[3] === cafeId);
+  console.log("ccccccccccccaaaaaaaaaaaafffffffffffffeeeeeeeeeee" + cafeId);
+  const shopClerks = userList.filter((user) => user[3] == cafeId);
 
+  console.log("this is shopclerks");
+  console.log(shopClerks);
   // Step 2 & 3: Iterate over filtered users and send data through their socketId
   shopClerks.forEach((user) => {
     const socketId = user[2]; // Get the socketId from the user data

@@ -19,9 +19,9 @@ const io = socketIo(server, {
     credentials: true,
   },
 });
-
+module.exports = { io };
 const SpotifyService = require("./services/SpotifyService");
-const clerkHelper = require("./services/clerkHelper");
+const userHelper = require("./services/userHelper");
 
 const spotifyService = new SpotifyService();
 
@@ -56,13 +56,13 @@ io.on("connection", async (socket) => {
     // Emit a code immediately upon connection
     const randomAuthCode = generateRandomString(11);
     console.log(randomAuthCode);
-    clerkHelper.storeQRCode(socket.id, randomAuthCode); // Store QR code with socket ID using helper function
+    userHelper.storeQRCode(socket.id, randomAuthCode); // Store QR code with socket ID using helper function
     socket.emit("res_guest_side", randomAuthCode);
 
     socket.on("disconnect", () => {
       console.log(`Client ${socket.id} disconnected`);
       // Delete QR code associated with this socket
-      const qrCode = clerkHelper.deleteQRCodeBySocketId(socket.id);
+      const qrCode = userHelper.deleteQRCodeBySocketId(socket.id);
       if (qrCode) {
         console.log(
           `Deleted QR code ${qrCode} associated with socket ${socket.id}`,
@@ -72,7 +72,7 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("read_qrCode", async ({ qrCode, token }) => {
-    const qrCodeData = clerkHelper.getSocketIdAndShopIdByQRCode(qrCode);
+    const qrCodeData = userHelper.getSocketIdAndShopIdByQRCode(qrCode);
     if (qrCodeData) {
       const socketId = qrCodeData.socketId;
       const session = await Session.findOne({
@@ -98,10 +98,10 @@ io.on("connection", async (socket) => {
             sessionCode,
             user.cafeId,
           ];
-          clerkHelper.createGuestSideSession(guestSideSession);
+          userHelper.createGuestSideSession(guestSideSession);
 
           // Delete QR code from map after it's read
-          clerkHelper.deleteQRCodeBySocketId(socketId);
+          userHelper.deleteQRCodeBySocketId(socketId);
           console.log(
             `Deleted QR code ${qrCode} after reading by client ${socketId}`,
           );
@@ -112,9 +112,22 @@ io.on("connection", async (socket) => {
     }
   });
 
-  socket.on("checkUserToken", async ({ token }) => {
+  socket.on("checkUserToken", async ({ token, shopId }) => {
     console.log(`trying to check token`);
     await authController.checkTokenSocket(socket, token);
+    if (shopId == "") return;
+
+    const cafe = await Cafe.findByPk(shopId);
+    if (!cafe) {
+      socket.emit("joined-failed"); // Inform client about failed join attempt
+      return;
+    }
+
+    const isSpotifyNeedLogin =
+      spotifyService.getRoomDeviceId(shopId) == null ? true : false;
+    // Emit success message or perform any other actions
+    socket.emit("joined-room", { shopId, isSpotifyNeedLogin });
+    console.log("emit to " + shopId + isSpotifyNeedLogin);
   });
 
   socket.on("checkGuestSideToken", async (data) => {
@@ -129,7 +142,7 @@ io.on("connection", async (socket) => {
     }
 
     // Verify guest side session
-    const sessionData = await clerkHelper.verifyGuestSideSession(
+    const sessionData = await userHelper.verifyGuestSideSession(
       token,
       socket.id,
     );
@@ -155,45 +168,44 @@ io.on("connection", async (socket) => {
     }
   });
 
-  socket.on("join-room", async (data) => {
-    const { shopId, token } = data;
+  // socket.on("join-room", async (data) => {
+  //   const { shopId, token } = data;
 
-    const cafe = await Cafe.findByPk(shopId);
-    if (!cafe) {
-      socket.emit("joined-failed"); // Inform client about failed join attempt
-      return;
-    }
+  //   const cafe = await Cafe.findByPk(shopId);
+  //   if (!cafe) {
+  //     socket.emit("joined-failed"); // Inform client about failed join attempt
+  //     return;
+  //   }
 
-    const session = await Session.findOne({ where: { token, isValid: true } });
+  //   const session = await Session.findOne({ where: { token, isValid: true } });
 
-    let user = null;
-    if (session) {
-      user = await User.findByPk(session.userId);
-    }
+  //   let user = null;
+  //   if (session) {
+  //     user = await User.findByPk(session.userId);
+  //   }
 
-    // Join the socket to the specified room
-    console.log(socket.id);
-    console.log(shopId);
-    console.log(token);
-    socket.join(shopId);
+  //   // Join the socket to the specified room
+  //   console.log(socket.id);
+  //   console.log(shopId);
+  //   console.log(token);
+  //   socket.join(shopId);
 
-    // Add user to the room
-    if (user) {
-      spotifyService.addUserToRoom(shopId, user.userId, socket.id);
-    } else {
-      spotifyService.addUserToRoom(shopId, "guest", socket.id);
-    }
+  //   // Add user to the room
+  //   // if (user) {
+  //   //   spotifyService.addUserToRoom(shopId, user.userId, socket.id);
+  //   // } else {
+  //   //   spotifyService.addUserToRoom(shopId, "guest", socket.id);
+  //   // }
 
-    // Optionally, you can associate the socket with the user ID
-    // For example, you can store the socket ID along with the user ID
-    // in a mapping for later use
-    const isSpotifyNeedLogin =
-      spotifyService.getRoomDeviceId(shopId) == "" ? true : false;
-    // Emit success message or perform any other actions
-    socket.emit("joined-room", { shopId, isSpotifyNeedLogin });
-    console.log(spotifyService.getUsersInRoom(shopId));
-    console.log(spotifyService.getRoomDeviceId(shopId));
-  });
+  //   // Optionally, you can associate the socket with the user ID
+  //   // For example, you can store the socket ID along with the user ID
+  //   // in a mapping for later use
+  //   const isSpotifyNeedLogin =
+  //     spotifyService.getRoomDeviceId(shopId) == null ? true : false;
+  //   // Emit success message or perform any other actions
+  //   socket.emit("joined-room", { shopId, isSpotifyNeedLogin });
+  //   console.log(spotifyService.getRoomDeviceId(shopId));
+  // });
 
   // Add event listener for leaving the room
   socket.on("leave-room", async (data) => {
@@ -263,7 +275,7 @@ io.on("connection", async (socket) => {
 
   socket.on("disconnect", () => {
     console.log("Client disconnected");
-    spotifyService.removeUserBySocketId(socket.id); // Remove user from room based on socket ID
+    // spotifyService.removeUserBySocketId(socket.id); // Remove user from room based on socket ID
   });
 });
 
@@ -282,7 +294,7 @@ app.post("/getConnectedGuestsSides", async (req, res) => {
   }
 
   // Verify guest side session
-  const sessionDatas = clerkHelper.getSessionsByClerkId(session.userId);
+  const sessionDatas = userHelper.getSessionsByClerkId(session.userId);
   console.log("list" + sessionDatas);
 
   // Check if sessionData is null (session not found or invalid)
@@ -315,7 +327,7 @@ app.post("/removeConnectedGuestsSides", async (req, res) => {
     return res.redirect(process.env.FRONTEND_URI);
   }
 
-  const rm = clerkHelper.deleteGuestSideSessionByGuestSideSessionId(
+  const rm = userHelper.deleteGuestSideSessionByGuestSideSessionId(
     session.userId,
     req.body.guestSideSessionId,
   );
@@ -398,9 +410,9 @@ app.get("/logout", async (req, res) => {
 });
 
 setInterval(async () => {
-  Object.keys(clerkHelper.qrCodeSocketMap).forEach((socketId) => {
+  Object.keys(userHelper.qrCodeSocketMap).forEach((socketId) => {
     const randomAuthCode = generateRandomString(11);
-    clerkHelper.storeQRCode(socketId, randomAuthCode); // Update QR code with new value and shopId
+    userHelper.storeQRCode(socketId, randomAuthCode); // Update QR code with new value and shopId
     io.to(socketId).emit("res_guest_side", randomAuthCode); // Emit new QR code to client
   });
 }, 20000);

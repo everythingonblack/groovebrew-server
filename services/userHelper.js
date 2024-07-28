@@ -84,16 +84,6 @@ function updateGuestSideSocketId(sessionCode, newSocketId) {
   return false;
 }
 
-// Function to update clerk socketId by clerkId
-// function updateClerkSocketId(clerkId, newSocketId) {
-//   const session = guestSideList.find((session) => session[0] === clerkId);
-//   if (session) {
-//     session[1] = newSocketId;
-//     return true;
-//   }
-//   return false;
-// }
-
 async function updateUserSocketId(user, newSocketId) {
   try {
     const { userId, roleId, cafeId } = user;
@@ -155,7 +145,7 @@ function sendMessageToAllClerk(cafeId, data) {
   shopClerks.forEach((user) => {
     const socketId = user[2]; // Get the socketId from the user data
     console.log(`Sending data to user with socketId ${socketId}`);
-    io.to(socketId).emit(data); // Emit data to the socketId using Socket.io
+    io.to(socketId).emit("transaction_created"); // Emit data to the socketId using Socket.io
   });
 }
 

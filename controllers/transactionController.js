@@ -9,7 +9,7 @@ const {
 } = require("../models");
 const { sendEmail } = require("../services/emailServices");
 const { generateUniqueUsername } = require("../helpers/createGuestHelper");
-const clerkHelper = require("../services/clerkHelper");
+const userHelper = require("../services/userHelper");
 
 // Helper function to generate a token
 function generateToken() {
@@ -26,6 +26,7 @@ function isValidEmail(email) {
 }
 
 exports.transactionFromClerk = async (req, res) => {
+  console.log("fromclerk");
   const { cafeId } = req.params;
 
   const cafe = await Cafe.findByPk(cafeId);
@@ -139,6 +140,7 @@ exports.transactionFromClerk = async (req, res) => {
 };
 
 exports.transactionFromGuestSide = async (req, res) => {
+  console.log("fromguestside");
   //userId is guest who transacte
   const { cafeId } = req.params;
 
@@ -228,7 +230,7 @@ exports.transactionFromGuestSide = async (req, res) => {
       }
     });
 
-    clerkHelper.sendMessageToAllClerk(cafeId, "transaction_created");
+    userHelper.sendMessageToAllClerk(cafeId, "transaction_created");
 
     res.status(201).json({ message: "Transactions created successfully" });
   } catch (error) {
@@ -238,20 +240,21 @@ exports.transactionFromGuestSide = async (req, res) => {
 };
 
 exports.transactionFromGuestDevice = async (req, res) => {
+  console.log("fromguestdevice");
   //userId is guest who transacte
+  const token = generateToken();
   const { cafeId } = req.params;
 
   const cafe = await Cafe.findByPk(cafeId);
   if (!cafe) return res.status(404).json({ error: "Cafe not found" });
 
-  const { user_email, payment_type, serving_type, tableNo, transactions } =
-    req.body;
-
-  let paymentType = payment_type === "cash" ? "cash" : "cashless";
-  let servingType = serving_type === "pickup" ? "pickup" : "serve";
+  const { payment_type, serving_type, tableNo, transactions } = req.body;
+  let paymentType = payment_type == "cash" ? "cash" : "cashless";
+  let servingType = serving_type == "pickup" ? "pickup" : "serve";
   let tableId;
+  console.log(payment_type + servingType);
 
-  if (tableNo || servingType == "serve") {
+  if (servingType == "serve") {
     const table = await Table.findOne({
       where: { cafeId: cafeId, tableNo: tableNo },
     });
@@ -260,17 +263,11 @@ exports.transactionFromGuestDevice = async (req, res) => {
     tableId = table.tableId;
   }
 
-  let userEmail = user_email !== null ? user_email : "null";
-  if (userEmail != "null" && !isValidEmail(userEmail)) {
-    return res.status(400).json({ error: "Invalid email format" });
-  }
-
   let userId;
   if (!req.user) {
     // Create user with a default password
     const newUsername = await generateUniqueUsername();
     const newUser = await User.create({
-      email: userEmail,
       username: newUsername,
       password: "unsetunsetunset",
       roleId: 3,
@@ -311,11 +308,9 @@ exports.transactionFromGuestDevice = async (req, res) => {
       await Promise.all(detailedTransactions);
 
       if (!req.user) {
-        const token = generateToken();
         await Session.create({ userId: userId, token }, { transaction: t });
       } else if (user.password === "unsetunsetunset") {
         // Send email to complete registration
-        const token = generateToken();
         await Session.create({ userId: userId, token }, { transaction: t });
         await sendEmail(
           req.user.email,
@@ -327,9 +322,11 @@ exports.transactionFromGuestDevice = async (req, res) => {
       }
     });
 
-    clerkHelper.sendMessageToAllClerk(cafeId, "transaction_created");
+    userHelper.sendMessageToAllClerk(cafeId, "transaction_created");
 
-    res.status(201).json({ message: "Transactions created successfully" });
+    res
+      .status(201)
+      .json({ message: "Transactions created successfully", auth: token });
   } catch (error) {
     console.error("Error creating transactions:", error);
     res.status(500).json({ message: "Failed to create transactions" });

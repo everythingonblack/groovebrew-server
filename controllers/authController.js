@@ -1,6 +1,6 @@
 const bcrypt = require("bcrypt");
 const { User, Session } = require("../models");
-const clerkHelper = require("../services/clerkHelper");
+const userHelper = require("../services/userHelper");
 
 exports.checkTokenSocket = async (socket, token) => {
   console.log("initoken" + token);
@@ -34,7 +34,7 @@ exports.checkTokenSocket = async (socket, token) => {
     }
 
     // Update user socket information
-    clerkHelper.updateUserSocketId(user, socket.id);
+    userHelper.updateUserSocketId(user, socket.id);
 
     return socket.emit("checkUserTokenRes", {
       status: 200,

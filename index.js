@@ -142,7 +142,7 @@ io.on("connection", async (socket) => {
     }
 
     // Verify guest side session
-    const sessionData = await userHelper.verifyGuestSideSession(
+    const sessionData = await userHelper.updateGuestSideSocketId(
       token,
       socket.id,
     );

@@ -155,8 +155,14 @@ function getSessionByGuestSideSessionId(sessionId) {
 }
 
 // Function to verify guest side session and return its data
-async function verifyGuestSideSession(sessionCode, newSocketId) {
+async function verifyGuestSideSession(sessionCode) {
   const session = guestSideList.find((session) => session[3] === sessionCode);
+  if (session) return session;
+  else return null;
+}
+
+async function updateSocketGuestSide(sessionCode, newSocketId) {
+  const session = await verifyGuestSideSession(sessionCode);
 
   if (session) {
     const user = await User.findByPk(session[0]);
@@ -203,6 +209,7 @@ module.exports = {
   sendMessageToAllClerk,
   getSessionByGuestSideSessionId,
   verifyGuestSideSession,
+  updateSocketGuestSide,
   getSessionsByClerkId,
   qrCodeSocketMap, // Export for testing or debugging purposes if needed
   guestSideList, // Export for testing or debugging purposes if needed

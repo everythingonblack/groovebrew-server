@@ -142,13 +142,26 @@ exports.transactionFromClerk = async (req, res) => {
 exports.transactionFromGuestSide = async (req, res) => {
   console.log("fromguestside");
   //userId is guest who transacte
-  const { cafeId } = req.params;
+  const {
+    token,
+    user_email,
+    payment_type,
+    serving_type,
+    tableNo,
+    transactions,
+  } = req.body;
+
+  const checkSession = userHelper.verifyGuestSideSession(token);
+  if (!checkSession)
+    return res.status(404).json({ error: "Session not found" });
+
+  const clerkOf = await User.findByPk(checkSession[0]);
+  if (!clerkOf) return res.status(404).json({ error: "Clerk not found" });
+
+  const cafeId = clerkOf.cafeId;
 
   const cafe = await Cafe.findByPk(cafeId);
   if (!cafe) return res.status(404).json({ error: "Cafe not found" });
-
-  const { user_email, payment_type, serving_type, tableNo, transactions } =
-    req.body;
 
   let paymentType = payment_type === "cash" ? "cash" : "cashless";
   let servingType = serving_type === "pickup" ? "pickup" : "serve";

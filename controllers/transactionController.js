@@ -29,17 +29,14 @@ exports.transactionFromClerk = async (req, res) => {
   console.log("fromclerk");
   const { cafeId } = req.params;
 
-  const cafe = await Cafe.findByPk(cafeId);
-  if (!cafe) return res.status(404).json({ error: "Cafe not found" });
-
-  if (req.user.cafeId != cafe.cafeId) {
+  if (req.user.cafeId != cafeId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   const { user_email, payment_type, serving_type, tableNo, transactions } =
     req.body;
 
-  let userEmail = user_email !== null ? user_email : "null";
+  let userEmail = user_email != null ? user_email : "null";
   if (userEmail != "null" && !isValidEmail(userEmail)) {
     return res.status(400).json({ error: "Invalid email format" });
   }
@@ -103,32 +100,33 @@ exports.transactionFromClerk = async (req, res) => {
       });
 
       await Promise.all(detailedTransactions);
+      if (userEmail != "null") {
+        if (!user) {
+          const token = generateToken();
+          await Session.create({ userId: userId, token }, { transaction: t });
 
-      if (!user) {
-        const token = generateToken();
-        await Session.create({ userId: userId, token }, { transaction: t });
-
-        // Send an email to create an account
-        await sendEmail(user_email, cafe, "invite", transactions.items, token);
-      } else if (user.password === "unsetunsetunset") {
-        // Send email to complete registration
-        const token = generateToken();
-        await Session.create({ userId: userId, token }, { transaction: t });
-        await sendEmail(
-          user_email,
-          cafe,
-          "completeRegistration",
-          transactions.items,
-          token,
-        );
-      } else {
-        // Send transaction notification email
-        await sendEmail(
-          user_email,
-          cafe,
-          "transactionNotification",
-          transactions.items,
-        );
+          // Send an email to create an account
+          await sendEmail(userEmail, cafe, "invite", transactions.items, token);
+        } else if (user.password === "unsetunsetunset") {
+          // Send email to complete registration
+          const token = generateToken();
+          await Session.create({ userId: userId, token }, { transaction: t });
+          await sendEmail(
+            userEmail,
+            cafe,
+            "completeRegistration",
+            transactions.items,
+            token,
+          );
+        } else {
+          // Send transaction notification email
+          await sendEmail(
+            userEmail,
+            cafe,
+            "transactionNotification",
+            transactions.items,
+          );
+        }
       }
     });
 
@@ -142,16 +140,11 @@ exports.transactionFromClerk = async (req, res) => {
 exports.transactionFromGuestSide = async (req, res) => {
   console.log("fromguestside");
   //userId is guest who transacte
-  const {
-    token,
-    user_email,
-    payment_type,
-    serving_type,
-    tableNo,
-    transactions,
-  } = req.body;
+  const token = req.header("Authorization")?.replace("Bearer ", "");
+  const { user_email, payment_type, serving_type, tableNo, transactions } =
+    req.body;
 
-  const checkSession = userHelper.verifyGuestSideSession(token);
+  const checkSession = await userHelper.verifyGuestSideSession(token);
   if (!checkSession)
     return res.status(404).json({ error: "Session not found" });
 
@@ -167,7 +160,7 @@ exports.transactionFromGuestSide = async (req, res) => {
   let servingType = serving_type === "pickup" ? "pickup" : "serve";
   let tableId;
 
-  if (tableNo || servingType == "serve") {
+  if (servingType == "serve") {
     const table = await Table.findOne({
       where: { cafeId: cafeId, tableNo: tableNo },
     });
@@ -176,13 +169,15 @@ exports.transactionFromGuestSide = async (req, res) => {
     tableId = table.tableId;
   }
 
-  let userEmail = user_email !== null ? user_email : "null";
+  let userEmail = user_email != null ? user_email : "null";
   if (userEmail != "null" && !isValidEmail(userEmail)) {
     return res.status(400).json({ error: "Invalid email format" });
   }
 
+  const user = await User.findOne({ where: { email: user_email } });
+
   let userId;
-  if (!req.user) {
+  if (!user) {
     // Create user with a default password
     const newUsername = await generateUniqueUsername();
     const newUser = await User.create({
@@ -193,7 +188,7 @@ exports.transactionFromGuestSide = async (req, res) => {
     });
     userId = newUser.userId;
   } else {
-    userId = req.user.userId;
+    userId = user.userId;
   }
 
   try {
@@ -226,20 +221,23 @@ exports.transactionFromGuestSide = async (req, res) => {
 
       await Promise.all(detailedTransactions);
 
-      if (!req.user) {
-        const token = generateToken();
-        await Session.create({ userId: userId, token }, { transaction: t });
-      } else if (user.password === "unsetunsetunset") {
-        // Send email to complete registration
-        const token = generateToken();
-        await Session.create({ userId: userId, token }, { transaction: t });
-        await sendEmail(
-          req.user.email,
-          cafe,
-          "completeRegistration",
-          transactions.items,
-          token,
-        );
+      if (userEmail != "null") {
+        if (!user) {
+          const token = generateToken();
+          await Session.create({ userId: userId, token }, { transaction: t });
+          await sendEmail(userEmail, cafe, "invite", transactions.items, token);
+        } else if (user.password === "unsetunsetunset") {
+          // Send email to complete registration
+          const token = generateToken();
+          await Session.create({ userId: userId, token }, { transaction: t });
+          await sendEmail(
+            userEmail,
+            cafe,
+            "completeRegistration",
+            transactions.items,
+            token,
+          );
+        }
       }
     });
 
@@ -322,16 +320,6 @@ exports.transactionFromGuestDevice = async (req, res) => {
 
       if (!req.user) {
         await Session.create({ userId: userId, token }, { transaction: t });
-      } else if (user.password === "unsetunsetunset") {
-        // Send email to complete registration
-        await Session.create({ userId: userId, token }, { transaction: t });
-        await sendEmail(
-          req.user.email,
-          cafe,
-          "completeRegistration",
-          transactions.items,
-          token,
-        );
       }
     });
 

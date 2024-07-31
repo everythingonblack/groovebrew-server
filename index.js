@@ -113,21 +113,25 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("checkUserToken", async ({ token, shopId }) => {
-    console.log(`trying to check token`);
-    await authController.checkTokenSocket(socket, token);
-    if (shopId == "") return;
+    try {
+      console.log(`trying to check token`);
+      await authController.checkTokenSocket(socket, token);
+      if (shopId == "") return;
 
-    const cafe = await Cafe.findByPk(shopId);
-    if (!cafe) {
-      socket.emit("joined-failed"); // Inform client about failed join attempt
-      return;
+      const cafe = await Cafe.findByPk(shopId);
+      if (!cafe) {
+        socket.emit("joined-failed"); // Inform client about failed join attempt
+        return;
+      }
+
+      const isSpotifyNeedLogin =
+        spotifyService.getRoomDeviceId(shopId) == null ? true : false;
+      // Emit success message or perform any other actions
+      socket.emit("joined-room", { shopId, isSpotifyNeedLogin });
+      console.log("emit to " + shopId + isSpotifyNeedLogin);
+    } catch {
+      console.log("error" + shopId);
     }
-
-    const isSpotifyNeedLogin =
-      spotifyService.getRoomDeviceId(shopId) == null ? true : false;
-    // Emit success message or perform any other actions
-    socket.emit("joined-room", { shopId, isSpotifyNeedLogin });
-    console.log("emit to " + shopId + isSpotifyNeedLogin);
   });
 
   socket.on("checkGuestSideToken", async (data) => {
@@ -142,7 +146,7 @@ io.on("connection", async (socket) => {
     }
 
     // Verify guest side session
-    const sessionData = await userHelper.updateGuestSideSocketId(
+    const sessionData = await userHelper.updateSocketGuestSide(
       token,
       socket.id,
     );

@@ -75,7 +75,7 @@ function deleteGuestSideSessionByGuestSideSessionId(userId, sessionId) {
 }
 
 // Function to update guest side socketId by sessionCode
-function updateGuestSideSocketId(sessionCode, newSocketId) {
+async function updateGuestSideSocketId(sessionCode, newSocketId) {
   const session = guestSideList.find((session) => session[3] === sessionCode);
   if (session) {
     session[2] = newSocketId;
@@ -157,6 +157,7 @@ function getSessionByGuestSideSessionId(sessionId) {
 // Function to verify guest side session and return its data
 async function verifyGuestSideSession(sessionCode) {
   const session = guestSideList.find((session) => session[3] === sessionCode);
+  console.log(session);
   if (session) return session;
   else return null;
 }

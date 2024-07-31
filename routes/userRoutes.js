@@ -18,7 +18,12 @@ router.post("/create-admin", auth([0]), userController.createAdmin);
 router.post("/get-admin", auth([0]), userController.getAdminList);
 
 // Clerk routes
-router.post("/create-clerk", auth([1]), userController.createClerk);
+router.post(
+  "/create-clerk",
+  auth([1]),
+  checkCafeOwnership,
+  userController.createClerk,
+);
 router.get(
   "/get-clerk/:cafeId",
   auth([1]),

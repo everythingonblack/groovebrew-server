@@ -1,57 +1,86 @@
-const { Table } = require('../models');
+const { Table } = require("../models"); // Adjust path as necessary
 
-// Controller to create a table
-exports.createTable = async (req, res) => {
-  const { xposition, yposition } = req.body;
+// Function to generate a random string of lowercase alphabets
+function generateRandomString(length) {
+  const characters = "abcdefghijklmnopqrstuvwxyz";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
+}
 
-  if (isNaN(xposition) || isNaN(yposition)) {
-    return res.status(400).json({ error: 'Invalid xposition or yposition' });
+// Function to generate a unique table code in the format 'xxxxx-xxxxx-xxxxx'
+async function generateUniqueTableCode(shopId) {
+  let code;
+  let isUnique = false;
+
+  while (!isUnique) {
+    // Generate a table code in the format 'xxxxx-xxxxx-xxxxx'
+    code = `${generateRandomString(5)}-${generateRandomString(
+      5
+    )}-${generateRandomString(5)}`;
+
+    // Check if the generated code already exists in the database
+    const existingTable = await Table.findOne({
+      where: {
+        cafeId: shopId,
+        tableCode: code,
+      },
+    });
+
+    if (!existingTable) {
+      isUnique = true; // Code is unique, exit the loop
+    }
   }
 
-  const xPos = parseInt(xposition, 10);
-  const yPos = parseInt(yposition, 10);
+  return code;
+}
+
+exports.createTable = async (req, res) => {
+  const { newTable } = req.body;
+  const cafeId = req.cafe.cafeId; // Use cafeId from the request
 
   try {
+    // Generate a unique table code for the specified cafeId
+    const tableCode = await generateUniqueTableCode(cafeId);
+
     const table = await Table.create({
-      cafeId: req.cafe.cafeId,
-      xposition: xPos,
-      yposition: yPos
+      cafeId: cafeId,
+      xposition: newTable.xposition,
+      yposition: newTable.yposition,
+      tableNo: newTable.tableNo,
+      tableCode: tableCode,
     });
 
     return res.status(201).json(table);
   } catch (error) {
-    console.error('Error creating table:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Error creating table:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
 // Controller to update a table
 exports.updateTable = async (req, res) => {
   const { tableId } = req.params;
-  const { xposition, yposition } = req.body;
-
-  if (isNaN(xposition) || isNaN(yposition)) {
-    return res.status(400).json({ error: 'Invalid xposition or yposition' });
-  }
-
-  const xPos = parseInt(xposition, 10);
-  const yPos = parseInt(yposition, 10);
+  const { table } = req.body;
 
   try {
-    const table = await Table.findByPk(tableId);
+    const dbtable = await Table.findByPk(tableId);
 
-    if (!table) {
-      return res.status(404).json({ error: 'Table not found' });
+    if (!dbtable) {
+      return res.status(404).json({ error: "Table not found" });
     }
+    console.log(table);
+    dbtable.xposition = table.xposition;
+    dbtable.yposition = table.yposition;
+    dbtable.tableNo = table.tableNo;
+    await dbtable.save();
 
-    table.xposition = xPos;
-    table.yposition = yPos;
-    await table.save();
-
-    return res.status(200).json(table);
+    return res.status(200).json(dbtable);
   } catch (error) {
-    console.error('Error updating table:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Error updating table:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -64,16 +93,15 @@ exports.getTable = async (req, res) => {
     const table = await Table.findOne({ where: { cafeId, tableNo } });
 
     if (!table) {
-      return res.status(404).json({ error: 'Table not found' });
+      return res.status(404).json({ error: "Table not found" });
     }
 
     return res.status(200).json(table);
   } catch (error) {
-    console.error('Error fetching table:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Error fetching table:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
-
 
 // Controller to get all tables for a specific cafe
 exports.getTables = async (req, res) => {
@@ -83,8 +111,8 @@ exports.getTables = async (req, res) => {
     const tables = await Table.findAll({ where: { cafeId } });
     return res.status(200).json(tables);
   } catch (error) {
-    console.error('Error fetching tables:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Error fetching tables:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -96,13 +124,13 @@ exports.deleteTable = async (req, res) => {
     const table = await Table.findByPk(tableId);
 
     if (!table) {
-      return res.status(404).json({ error: 'Table not found' });
+      return res.status(404).json({ error: "Table not found" });
     }
 
     await table.destroy();
-    return res.status(200).json({ message: 'Table deleted successfully' });
+    return res.status(200).json({ message: "Table deleted successfully" });
   } catch (error) {
-    console.error('Error deleting table:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Error deleting table:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };

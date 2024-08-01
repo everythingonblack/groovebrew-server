@@ -103,12 +103,15 @@ exports.getTable = async (req, res) => {
   }
 };
 
-// Controller to get all tables for a specific cafe
+// Controller to get all tables for a specific cafe with tableNo sorted in ascending order
 exports.getTables = async (req, res) => {
   const { cafeId } = req.params;
 
   try {
-    const tables = await Table.findAll({ where: { cafeId } });
+    const tables = await Table.findAll({
+      where: { cafeId },
+      order: [["tableNo", "ASC"]], // Sort by tableNo in ascending order
+    });
     return res.status(200).json(tables);
   } catch (error) {
     console.error("Error fetching tables:", error);

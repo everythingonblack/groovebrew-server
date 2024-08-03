@@ -31,7 +31,15 @@ const upload = multer({
 }).single("image");
 
 const validateUnit = (unit) => {
-  const validUnits = ["kilogram", "liter", "piece"];
+  const validUnits = [
+    "kilogram",
+    "liter",
+    "piece",
+    "kuintal",
+    "ons",
+    "gram",
+    "meter",
+  ];
   return validUnits.includes(unit);
 };
 

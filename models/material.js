@@ -10,7 +10,15 @@ module.exports = (sequelize) => {
         autoIncrement: true,
       },
       unit: {
-        type: DataTypes.ENUM("kilogram", "liter", "piece"),
+        type: DataTypes.ENUM(
+          "kilogram",
+          "liter",
+          "piece",
+          "kuintal",
+          "ons",
+          "gram",
+          "meter"
+        ),
         allowNull: false,
       },
       name: {
@@ -31,7 +39,11 @@ module.exports = (sequelize) => {
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      // Removed stock field
+      removed: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false, // Default value for the new column
+        allowNull: false,
+      },
     },
     {
       tableName: "Material",

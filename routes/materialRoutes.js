@@ -24,13 +24,11 @@ router.get(
 router.put(
   "/update-material/:materialId",
   auth([1]),
-  checkCafeOwnership,
   materialController.updateMaterial
 );
 router.delete(
   "/delete-material/:materialId",
   auth([1]),
-  checkCafeOwnership,
   materialController.deleteMaterial
 );
 

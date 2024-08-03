@@ -7,7 +7,7 @@ const { checkCafeOwnership } = require("../middlewares/checkCafeOwnership");
 // Material Mutation routes
 router.post(
   "/create/:materialId",
-  auth([1]), // Adjust permissions as needed
+  auth([1, 2]),
   materialMutationController.createMaterialMutation
 ); // Create a new material mutation
 

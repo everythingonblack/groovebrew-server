@@ -36,7 +36,7 @@ function deleteQRCodeBySocketId(socketId) {
 // Function to get socketId and shopId by qrCode
 function getSocketIdAndShopIdByQRCode(qrCode) {
   const socketId = Object.keys(qrCodeSocketMap).find(
-    (socketId) => qrCodeSocketMap[socketId][0] === qrCode,
+    (socketId) => qrCodeSocketMap[socketId][0] === qrCode
   );
   if (socketId) {
     return { socketId };
@@ -108,14 +108,14 @@ async function updateUserSocketId(user, newSocketId) {
         userList.push([userId, roleId, newSocketId, null]);
       }
       console.log(
-        `User with userId ${userId}  and roleId  ${roleId} added to userList.`,
+        `User with userId ${userId}  and roleId  ${roleId} added to userList.`
       );
     }
 
     // Update guestSideList if roleId is 2 (assuming clerkId is defined somewhere)
     if (roleId === 2) {
       const sessionIndex = guestSideList.findIndex(
-        (session) => session[0] === userId,
+        (session) => session[0] === userId
       );
       if (sessionIndex !== -1) {
         guestSideList[sessionIndex][1] = newSocketId;
@@ -145,8 +145,37 @@ function sendMessageToAllClerk(cafeId, data) {
   shopClerks.forEach((user) => {
     const socketId = user[2]; // Get the socketId from the user data
     console.log(`Sending data to user with socketId ${socketId}`);
-    io.to(socketId).emit("transaction_created"); // Emit data to the socketId using Socket.io
+    io.to(socketId).emit(data); // Emit data to the socketId using Socket.io
   });
+}
+
+function sendMessageToSocket(socketId, data) {
+  io.to(socketId).emit(data);
+}
+
+function logUnloggedUserSocket(userId, socketId) {
+  userList.push([userId, 3, socketId, null]);
+  console.log(userList);
+}
+
+function sendMessageToUser(userId, data) {
+  // Find the user entry in the userList
+  const user = userList.find((entry) => entry[0] === userId);
+
+  if (user) {
+    const socketId = user[2]; // Get the socketId from the user data
+
+    if (socketId) {
+      console.log("sending message to " + socketId);
+      // Send the message to the socketId
+      io.to(socketId).emit(data);
+      console.log(`Message sent to user ${userId} via socketId ${socketId}`);
+    } else {
+      console.log(`No socketId found for user ${userId}`);
+    }
+  } else {
+    console.log(`User with userId ${userId} not found`);
+  }
 }
 
 // Function to get session by guest side sessionId
@@ -206,7 +235,10 @@ module.exports = {
   deleteGuestSideSessionByGuestSideSessionId, // Export the new function
   updateGuestSideSocketId,
   updateUserSocketId,
+  logUnloggedUserSocket,
+  sendMessageToUser,
   getAllClerk,
+  sendMessageToSocket,
   sendMessageToAllClerk,
   getSessionByGuestSideSessionId,
   verifyGuestSideSession,

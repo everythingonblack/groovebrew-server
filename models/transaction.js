@@ -49,6 +49,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
+      serving_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       is_paid: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -63,7 +67,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "Transaction",
       freezeTableName: true,
-    },
+    }
   );
 
   Transaction.associate = function (models) {

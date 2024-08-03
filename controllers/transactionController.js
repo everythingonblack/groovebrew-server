@@ -4,6 +4,8 @@ const {
   Session,
   Transaction,
   DetailedTransaction,
+  ItemType,
+  Item,
   Table,
   sequelize,
 } = require("../models");
@@ -84,7 +86,7 @@ exports.transactionFromClerk = async (req, res) => {
           tableId: servingType === "serve" ? tableId : null,
           is_paid: paymentType === "cash" ? true : false,
         },
-        { transaction: t },
+        { transaction: t }
       );
 
       // Create detailed transaction records
@@ -95,7 +97,7 @@ exports.transactionFromClerk = async (req, res) => {
             itemId: item.itemId,
             qty: item.qty,
           },
-          { transaction: t },
+          { transaction: t }
         );
       });
 
@@ -116,7 +118,7 @@ exports.transactionFromClerk = async (req, res) => {
             cafe,
             "completeRegistration",
             transactions.items,
-            token,
+            token
           );
         } else {
           // Send transaction notification email
@@ -124,7 +126,7 @@ exports.transactionFromClerk = async (req, res) => {
             userEmail,
             cafe,
             "transactionNotification",
-            transactions.items,
+            transactions.items
           );
         }
       }
@@ -204,7 +206,7 @@ exports.transactionFromGuestSide = async (req, res) => {
           tableId: servingType === "serve" ? tableId : null,
           is_paid: paymentType === "cash" ? true : false,
         },
-        { transaction: t },
+        { transaction: t }
       );
 
       // Create detailed transaction records
@@ -215,7 +217,7 @@ exports.transactionFromGuestSide = async (req, res) => {
             itemId: item.itemId,
             qty: item.qty,
           },
-          { transaction: t },
+          { transaction: t }
         );
       });
 
@@ -235,7 +237,7 @@ exports.transactionFromGuestSide = async (req, res) => {
             cafe,
             "completeRegistration",
             transactions.items,
-            token,
+            token
           );
         }
       }
@@ -259,12 +261,12 @@ exports.transactionFromGuestDevice = async (req, res) => {
   const cafe = await Cafe.findByPk(cafeId);
   if (!cafe) return res.status(404).json({ error: "Cafe not found" });
 
-  const { payment_type, serving_type, tableNo, transactions } = req.body;
+  const { payment_type, serving_type, tableNo, transactions, socketId } =
+    req.body;
   let paymentType = payment_type == "cash" ? "cash" : "cashless";
   let servingType = serving_type == "pickup" ? "pickup" : "serve";
   let tableId;
-  console.log(payment_type + servingType);
-
+  console.log("bayar" + socketId);
   if (servingType == "serve") {
     const table = await Table.findOne({
       where: { cafeId: cafeId, tableNo: tableNo },
@@ -284,6 +286,9 @@ exports.transactionFromGuestDevice = async (req, res) => {
       roleId: 3,
     });
     userId = newUser.userId;
+
+    //because new user hasnt logged on socket list with its own userId
+    userHelper.logUnloggedUserSocket(userId, socketId);
   } else {
     userId = req.user.userId;
   }
@@ -301,7 +306,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
           tableId: servingType === "serve" ? tableId : null,
           is_paid: paymentType === "cash" ? true : false,
         },
-        { transaction: t },
+        { transaction: t }
       );
 
       // Create detailed transaction records
@@ -312,7 +317,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
             itemId: item.itemId,
             qty: item.qty,
           },
-          { transaction: t },
+          { transaction: t }
         );
       });
 
@@ -322,8 +327,9 @@ exports.transactionFromGuestDevice = async (req, res) => {
         await Session.create({ userId: userId, token }, { transaction: t });
       }
     });
-
+    socketId;
     userHelper.sendMessageToAllClerk(cafeId, "transaction_created");
+    userHelper.sendMessageToSocket(socketId, "transaction_pending");
 
     res
       .status(201)
@@ -331,6 +337,24 @@ exports.transactionFromGuestDevice = async (req, res) => {
   } catch (error) {
     console.error("Error creating transactions:", error);
     res.status(500).json({ message: "Failed to create transactions" });
+  }
+};
+
+exports.confirmTransaction = async (req, res) => {
+  const { transactionId } = req.params;
+
+  try {
+    const transaction = await Transaction.findByPk(transactionId);
+
+    transaction.confirmed = true;
+    await transaction.save();
+
+    userHelper.sendMessageToUser(transaction.userId, "transaction_success");
+
+    res.status(200).json(transaction);
+  } catch (error) {
+    console.error("Error updating table:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -347,6 +371,150 @@ exports.getTransaction = async (req, res) => {
   }
 };
 
+exports.getTransactions = async (req, res) => {
+  const { cafeId } = req.params;
+  const { demandLength } = req.query;
+
+  if (req.user.cafeId != cafeId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    // Convert demandLength to integer and set limit
+    const limit = parseInt(demandLength, 10);
+
+    // Prepare the query options
+    const queryOptions = {
+      where: { cafeId: cafeId },
+      order: [["createdAt", "DESC"]], // Sort by creation date
+      include: [
+        {
+          model: DetailedTransaction,
+          include: [Item], // Include associated Item model
+        },
+        {
+          model: Table,
+        },
+      ],
+    };
+
+    // Apply the limit if it's not -1
+    if (limit !== -1) {
+      queryOptions.limit = limit;
+    }
+
+    // Retrieve transactions
+    const transactions = await Transaction.findAll(queryOptions);
+
+    res.status(200).json(transactions);
+  } catch (error) {
+    console.error("Error fetching transactions:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// exports.getTransactions = async (req, res) => {
+//   const { cafeId } = req.params;
+//   const { demandLength } = req.query;
+
+//   if (req.user.cafeId != cafeId) {
+//     return res.status(401).json({ error: "Unauthorized" });
+//   }
+
+//   try {
+//     // Convert demandLength to integer and set limit
+//     const limit = parseInt(demandLength, 10);
+
+//     // Prepare the query options
+//     const queryOptions = {
+//       where: { cafeId: cafeId },
+//       order: [["createdAt", "DESC"]],
+//       include: [
+//         {
+//           model: DetailedTransaction,
+//           include: [
+//             {
+//               model: Item,
+//               include: [ItemType],
+//             },
+//           ],
+//         },
+//         {
+//           model: Table,
+//         },
+//       ],
+//     };
+
+//     // Apply the limit if it's not -1
+//     if (limit !== -1) {
+//       queryOptions.limit = limit;
+//     }
+
+//     // Retrieve transactions
+//     const transactions = await Transaction.findAll(queryOptions);
+
+//     // Initialize an array to store the final result
+//     const result = [];
+
+//     // Process transactions
+//     transactions.forEach((transaction) => {
+//       // Initialize a map to collect items by ItemType for the current transaction
+//       const itemTypeMap = new Map();
+
+//       transaction.DetailedTransactions.forEach((detailed) => {
+//         if (detailed.Item && detailed.Item.ItemType) {
+//           const itemType = detailed.Item.ItemType;
+
+//           // Create an entry in the map if it doesn't exist
+//           if (!itemTypeMap.has(itemType.itemTypeId)) {
+//             itemTypeMap.set(itemType.itemTypeId, {
+//               itemTypeId: itemType.itemTypeId,
+//               cafeId: itemType.cafeId,
+//               typeName: itemType.name,
+//               itemList: [],
+//             });
+//           }
+
+//           // Add item to the correct itemType entry
+//           itemTypeMap.get(itemType.itemTypeId).itemList.push({
+//             itemId: detailed.itemId,
+//             price: detailed.Item.price,
+//             name: detailed.Item.name,
+//             image: detailed.Item.image,
+//             qty: detailed.qty,
+//           });
+//         }
+//       });
+
+//       // Convert the map values to an array
+//       const itemTypeList = Array.from(itemTypeMap.values());
+
+//       // Add transaction details along with itemTypeList to the result
+//       result.push({
+//         transactionId: transaction.transactionId,
+//         userId: transaction.userId,
+//         user_email: transaction.user_email,
+//         clerkId: transaction.clerkId,
+//         tableId: transaction.tableId,
+//         cafeId: transaction.cafeId,
+//         payment_type: transaction.payment_type,
+//         serving_type: transaction.serving_type,
+//         is_paid: transaction.is_paid,
+//         confirmed: transaction.confirmed,
+//         createdAt: transaction.createdAt,
+//         updatedAt: transaction.updatedAt,
+//         Table: transaction.Table,
+//         itemTypes: itemTypeList,
+//       });
+//     });
+
+//     res.status(200).json(result);
+//   } catch (error) {
+//     console.error("Error fetching transactions:", error);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// };
+
 // Controller to update a user
 exports.endCashTransaction = async (req, res) => {
   const { transactionId } = req.params;
@@ -360,7 +528,7 @@ exports.endCashTransaction = async (req, res) => {
     transaction.is_paid = true;
     await transaction.save();
 
-    res.status(200).json(table);
+    res.status(200).json(transaction);
   } catch (error) {
     console.error("Error updating table:", error);
     res.status(500).json({ error: "Internal server error" });

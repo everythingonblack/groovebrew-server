@@ -28,6 +28,8 @@ const spotifyService = new SpotifyService();
 const userRoutes = require("./routes/userRoutes");
 const cafeRoutes = require("./routes/cafeRoutes");
 const itemRoutes = require("./routes/itemRoutes");
+const materialRoutes = require("./routes/materialRoutes");
+const materialMutationRoutes = require("./routes/materialMutationRoutes");
 const tableRoutes = require("./routes/tableRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const authController = require("./controllers/authController");
@@ -65,7 +67,7 @@ io.on("connection", async (socket) => {
       const qrCode = userHelper.deleteQRCodeBySocketId(socket.id);
       if (qrCode) {
         console.log(
-          `Deleted QR code ${qrCode} associated with socket ${socket.id}`,
+          `Deleted QR code ${qrCode} associated with socket ${socket.id}`
         );
       }
     });
@@ -103,7 +105,7 @@ io.on("connection", async (socket) => {
           // Delete QR code from map after it's read
           userHelper.deleteQRCodeBySocketId(socketId);
           console.log(
-            `Deleted QR code ${qrCode} after reading by client ${socketId}`,
+            `Deleted QR code ${qrCode} after reading by client ${socketId}`
           );
         }
       }
@@ -148,7 +150,7 @@ io.on("connection", async (socket) => {
     // Verify guest side session
     const sessionData = await userHelper.updateSocketGuestSide(
       token,
-      socket.id,
+      socket.id
     );
 
     // Check if sessionData is null (session not found or invalid)
@@ -333,7 +335,7 @@ app.post("/removeConnectedGuestsSides", async (req, res) => {
 
   const rm = userHelper.deleteGuestSideSessionByGuestSideSessionId(
     session.userId,
-    req.body.guestSideSessionId,
+    req.body.guestSideSessionId
   );
   if (!rm)
     return res.status(404).json({ error: "side session not found or invalid" });
@@ -498,13 +500,13 @@ setInterval(async () => {
             // If 10 seconds or less remaining and next track is set, add it to Spotify queue
             await spotifyService.playNextInQueue(
               shopId,
-              spotifyService.rooms[shopId].nextTrack,
+              spotifyService.rooms[shopId].nextTrack
             );
             spotifyService.rooms[shopId].nextTrack = "";
           }
         } else {
           console.log(
-            "No track is currently playing or duration information is not available.",
+            "No track is currently playing or duration information is not available."
           );
         }
       }
@@ -516,7 +518,7 @@ setInterval(async () => {
       const lyrics = await spotifyService.fetchRandomTrackLyrics(
         shopId,
         playbackState.item.id,
-        true,
+        true
       );
       console.log("force");
       io.to(shopId).emit("updateLyrics", lyrics.lines);
@@ -533,7 +535,7 @@ setInterval(async () => {
         console.log("refreshing " + shopId);
       } catch (error) {
         console.error(
-          `Failed to refresh token for room ${shopId}: ${error.message}`,
+          `Failed to refresh token for room ${shopId}: ${error.message}`
         );
       }
     }
@@ -560,6 +562,8 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/user", userRoutes);
 app.use("/cafe", cafeRoutes);
 app.use("/item", itemRoutes);
+app.use("/material", materialRoutes);
+app.use("/mutation", materialMutationRoutes);
 app.use("/table", tableRoutes);
 app.use("/transaction", transactionRoutes);
 

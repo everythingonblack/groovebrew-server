@@ -82,7 +82,7 @@ exports.transactionFromClerk = async (req, res) => {
           cafeId: cafeId,
           payment_type: paymentType,
           serving_type: servingType,
-          confirmed: true,
+          confirmed: 1,
           tableId: servingType === "serve" ? tableId : null,
           is_paid: paymentType === "cash" ? true : false,
         },
@@ -202,7 +202,7 @@ exports.transactionFromGuestSide = async (req, res) => {
           cafeId: cafeId,
           payment_type: paymentType,
           serving_type: servingType,
-          confirmed: false,
+          confirmed: 0,
           tableId: servingType === "serve" ? tableId : null,
           is_paid: paymentType === "cash" ? true : false,
         },
@@ -302,7 +302,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
           cafeId: cafeId,
           payment_type: paymentType,
           serving_type: servingType,
-          confirmed: false,
+          confirmed: 0,
           tableId: servingType === "serve" ? tableId : null,
           is_paid: paymentType === "cash" ? true : false,
         },
@@ -346,10 +346,31 @@ exports.confirmTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findByPk(transactionId);
 
-    transaction.confirmed = true;
+    if (transaction.cafeId != req.user.cafeId)
+      return res.status(401).json({ error: "Unauthorized" });
+    transaction.confirmed = 1;
     await transaction.save();
 
     userHelper.sendMessageToUser(transaction.userId, "transaction_success");
+
+    res.status(200).json(transaction);
+  } catch (error) {
+    console.error("Error updating table:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.declineTransaction = async (req, res) => {
+  const { transactionId } = req.params;
+
+  try {
+    const transaction = await Transaction.findByPk(transactionId);
+    if (transaction.cafeId != req.user.cafeId)
+      return res.status(401).json({ error: "Unauthorized" });
+    transaction.confirmed = -1;
+    await transaction.save();
+
+    userHelper.sendMessageToUser(transaction.userId, "transaction_failed");
 
     res.status(200).json(transaction);
   } catch (error) {

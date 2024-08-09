@@ -22,6 +22,11 @@ router.post(
   transactionController.confirmTransaction
 );
 router.post(
+  "/decline-transaction/:transactionId",
+  auth([2]),
+  transactionController.declineTransaction
+);
+router.post(
   "/fromGuestSide/:cafeId",
   transactionController.transactionFromGuestSide
 );

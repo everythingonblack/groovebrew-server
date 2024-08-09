@@ -10,21 +10,22 @@ router.post(
   "/create/:cafeId",
   auth([1]),
   checkCafeOwnership,
-  tableController.createTable,
+  tableController.createTable
 );
+router.get("/get-table-by-code/:tableCode", tableController.getTableByCode);
 router.get("/get-table/:cafeId", tableController.getTable);
 router.get("/get-tables/:cafeId", auth([1, 2]), tableController.getTables);
 router.put(
   "/set-table/:cafeId/:tableId",
   auth([1]),
   checkCafeOwnership,
-  tableController.updateTable,
+  tableController.updateTable
 );
 router.delete(
   "/rm-table/:cafeId/:tableId",
   auth([1]),
   checkCafeOwnership,
-  tableController.deleteTable,
+  tableController.deleteTable
 );
 
 module.exports = router;

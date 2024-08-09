@@ -119,6 +119,24 @@ exports.getTables = async (req, res) => {
   }
 };
 
+// Controller to get a specific table by tableNo
+exports.getTableByCode = async (req, res) => {
+  const { tableCode } = req.params;
+
+  try {
+    const table = await Table.findOne({ where: { tableCode } });
+
+    if (!table) {
+      return res.status(404).json({ error: "Table not found" });
+    }
+
+    return res.status(200).json(table);
+  } catch (error) {
+    console.error("Error fetching table:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 // Controller to delete a table
 exports.deleteTable = async (req, res) => {
   const { tableId } = req.params;

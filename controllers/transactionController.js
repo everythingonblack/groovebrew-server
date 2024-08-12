@@ -304,7 +304,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
           serving_type: servingType,
           confirmed: 0,
           tableId: servingType === "serve" ? tableId : null,
-          is_paid: paymentType === "cash" ? true : false,
+          is_paid: false,
         },
         { transaction: t }
       );
@@ -348,10 +348,23 @@ exports.confirmTransaction = async (req, res) => {
 
     if (transaction.cafeId != req.user.cafeId)
       return res.status(401).json({ error: "Unauthorized" });
+
+    if (transaction.payment_type == "cash") transaction.is_paid = true;
+    // cashless transaction are waiting for guest to press "i have already paid", then the clerk press "is paid"
+
     transaction.confirmed = 1;
     await transaction.save();
 
-    userHelper.sendMessageToUser(transaction.userId, "transaction_success");
+    if (transaction.payment_type == "cash")
+      userHelper.sendMessageToUser(transaction.userId, "transaction_success");
+    else
+      userHelper.sendMessageToUser(
+        transaction.userId,
+        "transaction_confirmed",
+        {
+          transactionId: transaction.transactionId,
+        }
+      );
 
     res.status(200).json(transaction);
   } catch (error) {
@@ -370,7 +383,54 @@ exports.declineTransaction = async (req, res) => {
     transaction.confirmed = -1;
     await transaction.save();
 
-    userHelper.sendMessageToUser(transaction.userId, "transaction_failed");
+    userHelper.sendMessageToUser(transaction.userId, "transaction_failed", {
+      transactionId: transaction.transactionId,
+    });
+
+    res.status(200).json(transaction);
+  } catch (error) {
+    console.error("Error updating table:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.paymentClaimed = async (req, res) => {
+  const { transactionId } = req.params;
+
+  try {
+    const transaction = await Transaction.findByPk(transactionId);
+
+    if (transaction.userId != req.user.userId)
+      return res.status(401).json({ error: "Unauthorized" });
+
+    transaction.paymentClaimed = true;
+    await transaction.save();
+
+    userHelper.sendMessageToAllClerk(transaction.cafeId, "payment_claimed", {
+      transactionId: transaction.transactionId,
+    });
+
+    res.status(200).json(transaction);
+  } catch (error) {
+    console.error("Error updating table:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+exports.confirmIsCashlessPaidTransaction = async (req, res) => {
+  const { transactionId } = req.params;
+
+  try {
+    const transaction = await Transaction.findByPk(transactionId);
+
+    if (transaction.cafeId != req.user.cafeId)
+      return res.status(401).json({ error: "Unauthorized" });
+
+    if (transaction.payment_type == "cashless") transaction.is_paid = true;
+    // cashless transaction are waiting for guest to press "i have already paid", then the clerk press "is paid"
+
+    await transaction.save();
+
+    userHelper.sendMessageToUser(transaction.userId, "transaction_success");
 
     res.status(200).json(transaction);
   } catch (error) {
@@ -383,11 +443,26 @@ exports.getTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
   try {
-    const transaction = await Transaction.findByPk(transactionId);
+    // Fetch the transaction, including related detailed transactions and items
+    const transaction = await Transaction.findByPk(transactionId, {
+      include: {
+        model: DetailedTransaction,
+        include: [Item], // Assuming DetailedTransaction has an association with Item
+      },
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ error: "Transaction not found" });
+    }
+
+    // Check if the user is authorized to view this transaction
+    if (transaction.userId !== req.user.userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     res.status(200).json(transaction);
   } catch (error) {
-    console.error("Error updating table:", error);
+    console.error("Error fetching transaction:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

@@ -149,8 +149,14 @@ function sendMessageToAllClerk(cafeId, data) {
   });
 }
 
-function sendMessageToSocket(socketId, data) {
-  io.to(socketId).emit(data);
+function sendMessageToSocket(socketId, event, data) {
+  if (data !== undefined && data !== null) {
+    // Emit with data if provided
+    io.to(socketId).emit(event, data);
+  } else {
+    // Emit without data
+    io.to(socketId).emit(event);
+  }
 }
 
 function logUnloggedUserSocket(userId, socketId) {
@@ -158,7 +164,7 @@ function logUnloggedUserSocket(userId, socketId) {
   console.log(userList);
 }
 
-function sendMessageToUser(userId, data) {
+function sendMessageToUser(userId, event, data) {
   // Find the user entry in the userList
   const user = userList.find((entry) => entry[0] === userId);
 
@@ -166,9 +172,9 @@ function sendMessageToUser(userId, data) {
     const socketId = user[2]; // Get the socketId from the user data
 
     if (socketId) {
-      console.log("sending message to " + socketId);
-      // Send the message to the socketId
-      io.to(socketId).emit(data);
+      console.log("Sending message to " + socketId);
+      // Send the message to the socketId, include data if it exists
+      io.to(socketId).emit(event, data || {}); // Send an empty object if no data is provided
       console.log(`Message sent to user ${userId} via socketId ${socketId}`);
     } else {
       console.log(`No socketId found for user ${userId}`);

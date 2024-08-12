@@ -12,6 +12,11 @@ router.post(
   transactionController.transactionFromClerk
 );
 router.get(
+  "/get-transaction/:transactionId",
+  auth([]),
+  transactionController.getTransaction
+);
+router.get(
   "/get-transactions/:cafeId",
   auth([2]),
   transactionController.getTransactions
@@ -25,6 +30,12 @@ router.post(
   "/decline-transaction/:transactionId",
   auth([2]),
   transactionController.declineTransaction
+);
+//if buyer is claim has paid the transaction
+router.get(
+  "/payment-claimed/:transactionId",
+  auth([]),
+  transactionController.paymentClaimed
 );
 router.post(
   "/fromGuestSide/:cafeId",

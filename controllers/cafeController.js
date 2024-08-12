@@ -2,7 +2,7 @@ const { Cafe } = require("../models");
 const multer = require("multer");
 const path = require("path");
 
-// Set up multer for file upload
+// Multer configuration for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "uploads/");
@@ -12,27 +12,29 @@ const storage = multer.diskStorage({
   },
 });
 
+const fileFilter = (req, file, cb) => {
+  const fileTypes = /jpeg|jpg|png/;
+  const extname = fileTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimeType = fileTypes.test(file.mimetype);
+
+  if (extname && mimeType) {
+    return cb(null, true);
+  } else {
+    cb(new Error("Only images are allowed (jpeg, jpg, png)."));
+  }
+};
+
+// Configure multer for handling multiple file uploads
 const upload = multer({
   storage: storage,
   limits: { fileSize: 1024 * 1024 * 5 }, // 5 MB file size limit
-  fileFilter: (req, file, cb) => {
-    const fileTypes = /jpeg|jpg|png/;
-    const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
-    );
-    const mimeType = fileTypes.test(file.mimetype);
+  fileFilter: fileFilter,
+}).fields([
+  { name: "qrBackground", maxCount: 1 },
+  { name: "qrPayment", maxCount: 1 },
+]);
 
-    if (extname && mimeType) {
-      return cb(null, true);
-    } else {
-      cb(new Error("Only images are allowed (jpeg, jpg, png)."));
-    }
-  },
-}).single("qrBackground"); // Use 'qrBackground' for file input
-
-// Controller methods
-
-// Update a cafe
+// Update cafe details
 exports.updateCafe = async (req, res) => {
   upload(req, res, async (err) => {
     if (err) {
@@ -41,13 +43,19 @@ exports.updateCafe = async (req, res) => {
 
     const { cafeId } = req.params;
     const { name, xposition, yposition, scale } = req.body;
-    const qrBackground = req.file ? req.file.path : null;
+    const qrBackground = req.files["qrBackground"]
+      ? req.files["qrBackground"][0].path
+      : null;
+    const qrPayment = req.files["qrPayment"]
+      ? req.files["qrPayment"][0].path
+      : null;
 
     try {
       const cafe = await Cafe.findByPk(cafeId);
       if (cafe) {
         cafe.name = name || cafe.name;
         cafe.qrBackground = qrBackground || cafe.qrBackground;
+        cafe.qrPayment = qrPayment || cafe.qrPayment;
         cafe.xposition = xposition || cafe.xposition;
         cafe.yposition = yposition || cafe.yposition;
         cafe.scale = scale || cafe.scale;
@@ -63,8 +71,6 @@ exports.updateCafe = async (req, res) => {
     }
   });
 };
-
-// Example usage of other controller methods for completeness
 
 // Create a new cafe
 exports.createCafe = async (req, res) => {
@@ -89,11 +95,9 @@ exports.getCafeById = async (req, res) => {
 
   try {
     const cafe = await Cafe.findByPk(cafeId);
-
     if (!cafe) {
       return res.status(404).json({ error: "Cafe not found" });
     }
-
     res.status(200).json(cafe);
   } catch (error) {
     console.error("Error fetching cafe:", error);
@@ -119,22 +123,19 @@ exports.deleteCafe = async (req, res) => {
   }
 };
 
-// For super admin getting cafe by user ID
+// Get cafes by user ID (for super admin or authorized users)
 exports.getCafeByUserId = async (req, res) => {
   const { userId } = req.params;
-  console.log(userId + "params");
-  console.log(req.user.userId + "req");
+
   try {
-    // if (userId !== req.user.userId && req.user.roleId != 0) {
+    // Optional authorization check (commented out)
+    // if (userId !== req.user.userId && req.user.roleId !== 0) {
     //   return res.status(403).json({ error: 'You do not have permission to get these cafes' });
     // }
 
     const cafes = await Cafe.findAll({
-      where: {
-        ownerId: userId,
-      },
+      where: { ownerId: userId },
     });
-    console.log(cafes);
 
     res.status(200).json(cafes);
   } catch (error) {

@@ -1,4 +1,3 @@
-// Corrected Transaction Model
 "use strict";
 module.exports = (sequelize, DataTypes) => {
   const Transaction = sequelize.define(
@@ -62,6 +61,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
         defaultValue: 0,
+      },
+      paymentClaimed: {
+        // Added column
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
     },
     {

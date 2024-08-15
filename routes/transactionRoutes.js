@@ -43,6 +43,7 @@ router.post(
 );
 router.post(
   "/fromGuestDevice/:cafeId",
+  auth([-1]),
   transactionController.transactionFromGuestDevice
 );
 module.exports = router;

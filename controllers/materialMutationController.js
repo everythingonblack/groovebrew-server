@@ -1,10 +1,9 @@
 const { Material, MaterialMutation, Cafe } = require("../models");
 const { isAuthorizedForMaterial } = require("../middlewares/authHelpers");
 
-// Create a new material mutation
 exports.createMaterialMutation = async (req, res) => {
   const { materialId } = req.params;
-  const { oldStock, newStock, changeDate, reason } = req.body;
+  const { newStock, changeDate, reason } = req.body;
 
   try {
     // Authorization check
@@ -13,13 +12,23 @@ exports.createMaterialMutation = async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    // Find the latest mutation for the material to get the old stock
+    const latestMutation = await MaterialMutation.findOne({
+      where: { materialId },
+      order: [["changeDate", "DESC"]], // Assuming changeDate determines the order of mutations
+    });
+
+    const oldStock = latestMutation ? latestMutation.newStock : 0; // Default to 0 if no previous mutation
+
+    // Create the new mutation
     const newMutation = await MaterialMutation.create({
       materialId,
       oldStock,
       newStock,
-      changeDate,
+      changeDate: new Date(),
       reason,
     });
+
     res.status(201).json(newMutation);
   } catch (error) {
     console.error("Failed to create material mutation:", error);

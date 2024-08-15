@@ -254,6 +254,9 @@ exports.transactionFromGuestSide = async (req, res) => {
 
 exports.transactionFromGuestDevice = async (req, res) => {
   console.log("fromguestdevice");
+  const tokenn = req.header("Authorization")?.replace("Bearer ", "");
+  console.log("ini tokeennnnn");
+  console.log(req.user);
   //userId is guest who transacte
   const token = generateToken();
   const { cafeId } = req.params;
@@ -331,9 +334,11 @@ exports.transactionFromGuestDevice = async (req, res) => {
     userHelper.sendMessageToAllClerk(cafeId, "transaction_created");
     userHelper.sendMessageToSocket(socketId, "transaction_pending");
 
-    res
-      .status(201)
-      .json({ message: "Transactions created successfully", auth: token });
+    res.status(201).json({
+      message: "Transactions created successfully",
+      newUser: req.user == null,
+      auth: token,
+    });
   } catch (error) {
     console.error("Error creating transactions:", error);
     res.status(500).json({ message: "Failed to create transactions" });

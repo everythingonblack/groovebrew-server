@@ -9,6 +9,9 @@ const {
   Table,
   sequelize,
 } = require("../models");
+const { Op, fn, col } = require("sequelize");
+
+const moment = require("moment");
 const { sendEmail } = require("../services/emailServices");
 const { generateUniqueUsername } = require("../helpers/createGuestHelper");
 const userHelper = require("../services/userHelper");
@@ -510,6 +513,541 @@ exports.getTransactions = async (req, res) => {
     res.status(200).json(transactions);
   } catch (error) {
     console.error("Error fetching transactions:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.getTransactions = async (req, res) => {
+  const { cafeId } = req.params;
+  const { demandLength } = req.query;
+
+  if (req.user.cafeId != cafeId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    // Convert demandLength to integer and set limit
+    const limit = parseInt(demandLength, 10);
+
+    // Prepare the query options
+    const queryOptions = {
+      where: { cafeId: cafeId },
+      order: [["createdAt", "DESC"]], // Sort by creation date
+      include: [
+        {
+          model: DetailedTransaction,
+          include: [Item], // Include associated Item model
+        },
+        {
+          model: Table,
+        },
+      ],
+    };
+
+    // Apply the limit if it's not -1
+    if (limit !== -1) {
+      queryOptions.limit = limit;
+    }
+
+    // Retrieve transactions
+    const transactions = await Transaction.findAll(queryOptions);
+
+    res.status(200).json(transactions);
+  } catch (error) {
+    console.error("Error fetching transactions:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.calculateIncome = async (req, res) => {
+  const { cafeId } = req.params;
+
+  try {
+    const today = new Date();
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(today.getFullYear() - 2);
+
+    // Fetch all transactions from the last 2 years
+    const transactions = await Transaction.findAll({
+      where: {
+        cafeId: cafeId,
+        
+        createdAt: {
+          [Op.between]: [twoYearsAgo, today],
+        },
+      },
+      include: [
+        {
+          model: DetailedTransaction,
+          include: [Item],
+        },
+      ],
+    });
+
+    // Helper function to calculate income for a given period
+    const calculateIncome = (transactions, startDate, endDate) => {
+      return transactions
+        .filter((transaction) => {
+          const date = new Date(transaction.createdAt);
+          return date >= startDate && date <= endDate;
+        })
+        .reduce((totalIncome, transaction) => {
+          const itemTotal = transaction.DetailedTransactions.reduce(
+            (sum, detailedTransaction) => {
+              return (
+                sum + detailedTransaction.Item.price * detailedTransaction.qty
+              );
+            },
+            0
+          );
+          return totalIncome + itemTotal;
+        }, 0);
+    };
+
+    // Helper function to get the start of the week/month/year
+    const getStartOfWeek = (date) => {
+      const start = new Date(date);
+      const day = start.getDay();
+      const diff = start.getDate() - day + (day === 0 ? -6 : 1); // Adjust when start of week is Sunday
+      start.setDate(diff);
+      return start;
+    };
+
+    const getStartOfMonth = (date) =>
+      new Date(date.getFullYear(), date.getMonth(), 1);
+    const getStartOfYear = (date) => new Date(date.getFullYear(), 0, 1);
+
+    // Define date ranges for calculations
+    const todayStart = new Date();
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(todayStart.getDate() - 1);
+
+    const thisWeekStart = getStartOfWeek(new Date());
+    const lastWeekStart = getStartOfWeek(new Date());
+    lastWeekStart.setFullYear(lastWeekStart.getFullYear() - 1);
+
+    const thisMonthStart = getStartOfMonth(new Date());
+    const lastMonthStart = getStartOfMonth(new Date());
+    lastMonthStart.setFullYear(lastMonthStart.getFullYear() - 1);
+
+    const thisYearStart = getStartOfYear(new Date());
+    const lastYearStart = getStartOfYear(new Date());
+    lastYearStart.setFullYear(lastYearStart.getFullYear() - 1);
+
+    // Calculate incomes
+    const dailyIncome = calculateIncome(transactions, todayStart, todayStart);
+    const dailyIncomeYesterday = calculateIncome(
+      transactions,
+      yesterdayStart,
+      yesterdayStart
+    );
+
+    const weeklyIncome = calculateIncome(
+      transactions,
+      thisWeekStart,
+      new Date()
+    );
+    const weeklyIncomeLastYear = calculateIncome(
+      transactions,
+      lastWeekStart,
+      new Date(
+        lastWeekStart.getFullYear(),
+        lastWeekStart.getMonth(),
+        lastWeekStart.getDate() + 7
+      )
+    );
+
+    const monthlyIncome = calculateIncome(
+      transactions,
+      thisMonthStart,
+      new Date()
+    );
+    const monthlyIncomeLastYear = calculateIncome(
+      transactions,
+      lastMonthStart,
+      new Date(lastMonthStart.getFullYear(), lastMonthStart.getMonth() + 1, 0)
+    );
+
+    const yearlyIncome = calculateIncome(
+      transactions,
+      thisYearStart,
+      new Date()
+    );
+    const yearlyIncomeLastYear = calculateIncome(
+      transactions,
+      lastYearStart,
+      new Date(lastYearStart.getFullYear() + 1, 0, 0)
+    );
+
+    // Calculate growth percentages
+    const dailyIncomeGrowth = dailyIncomeYesterday
+      ? ((dailyIncome - dailyIncomeYesterday) / dailyIncomeYesterday) * 100
+      : 0;
+    const weeklyIncomeGrowth = weeklyIncomeLastYear
+      ? ((weeklyIncome - weeklyIncomeLastYear) / weeklyIncomeLastYear) * 100
+      : 0;
+    const monthlyIncomeGrowth = monthlyIncomeLastYear
+      ? ((monthlyIncome - monthlyIncomeLastYear) / monthlyIncomeLastYear) * 100
+      : 0;
+    const yearlyIncomeGrowth = yearlyIncomeLastYear
+      ? ((yearlyIncome - yearlyIncomeLastYear) / yearlyIncomeLastYear) * 100
+      : 0;
+
+    res.status(200).json({
+      dailyIncome,
+      weeklyIncome,
+      monthlyIncome,
+      yearlyIncome,
+      dailyIncomeGrowth,
+      weeklyIncomeGrowth,
+      monthlyIncomeGrowth,
+      yearlyIncomeGrowth,
+    });
+  } catch (error) {
+    console.error("Error calculating income:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+exports.getBestSellingItems = async (req, res) => {
+  const { cafeId } = req.params;
+
+  if (!cafeId) {
+    return res.status(400).json({ error: "Cafe ID is required" });
+  }
+
+  try {
+    // Helper function to get total count for a given time range
+    const getTotalCountForItem = async (itemId, startDate, endDate) => {
+      return await DetailedTransaction.count({
+        include: [
+          {
+            model: Transaction,
+            attributes: [],
+            required: true,
+            where: {
+              cafeId: cafeId,
+              createdAt: {
+                [Op.between]: [startDate, endDate],
+              },
+            },
+          },
+        ],
+        where: {
+          itemId: itemId,
+        },
+      });
+    };
+
+    // Get today's date and calculate the ranges
+    const today = moment().startOf("day");
+    const startOfWeek = moment().startOf("week");
+    const startOfMonth = moment().startOf("month");
+    const startOfYear = moment().startOf("year");
+
+    const endOfDay = today.clone().endOf("day");
+    const endOfWeek = moment().endOf("week");
+    const endOfMonth = moment().endOf("month");
+    const endOfYear = moment().endOf("year");
+
+    // Function to calculate percentage change
+    const calculatePercentageChange = (current, previous) => {
+      if (previous === 0) return current === 0 ? 0 : 100;
+      return ((current - previous) / previous) * 100;
+    };
+
+    // Helper function to get stats for a given item ID
+    const getItemStats = async (
+      itemId,
+      periodStart,
+      periodEnd,
+      prevPeriodStart,
+      prevPeriodEnd
+    ) => {
+      const currentCount = await getTotalCountForItem(
+        itemId,
+        periodStart.toDate(),
+        periodEnd.toDate()
+      );
+      const previousCount = await getTotalCountForItem(
+        itemId,
+        prevPeriodStart.toDate(),
+        prevPeriodEnd.toDate()
+      );
+      return {
+        itemId,
+        sold: currentCount,
+        percentageByPreviousPeriod: calculatePercentageChange(
+          currentCount,
+          previousCount
+        ),
+      };
+    };
+
+    // Get item stats for each period
+    const dailyStats = [];
+    const weeklyStats = [];
+    const monthlyStats = [];
+    const yearlyStats = [];
+
+    // Get stats for today
+    const dailyItems = await DetailedTransaction.findAll({
+      attributes: ["itemId"],
+      include: [
+        {
+          model: Item,
+          attributes: ["itemId", "name"],
+          required: true,
+        },
+        {
+          model: Transaction,
+          attributes: [],
+          required: true,
+          where: {
+            cafeId: cafeId,
+            createdAt: {
+              [Op.between]: [today.toDate(), endOfDay.toDate()],
+            },
+          },
+        },
+      ],
+      group: ["DetailedTransaction.itemId", "Item.itemId"],
+      order: [[fn("COUNT", col("DetailedTransaction.itemId")), "DESC"]],
+    });
+
+    for (const item of dailyItems) {
+      const itemId = item.itemId;
+      const stats = await getItemStats(
+        itemId,
+        today,
+        endOfDay,
+        today.clone().subtract(1, "day").startOf("day"),
+        today.clone().subtract(1, "day").endOf("day")
+      );
+      dailyStats.push({ ...item.toJSON(), ...stats });
+    }
+
+    // Get stats for this week
+    const weeklyItems = await DetailedTransaction.findAll({
+      attributes: ["itemId"],
+      include: [
+        {
+          model: Item,
+          attributes: ["itemId", "name"],
+          required: true,
+        },
+        {
+          model: Transaction,
+          attributes: [],
+          required: true,
+          where: {
+            cafeId: cafeId,
+            createdAt: {
+              [Op.between]: [startOfWeek.toDate(), endOfWeek.toDate()],
+            },
+          },
+        },
+      ],
+      group: ["DetailedTransaction.itemId", "Item.itemId"],
+      order: [[fn("COUNT", col("DetailedTransaction.itemId")), "DESC"]],
+    });
+
+    for (const item of weeklyItems) {
+      const itemId = item.itemId;
+      const stats = await getItemStats(
+        itemId,
+        startOfWeek,
+        endOfWeek,
+        startOfWeek.clone().subtract(1, "week"),
+        endOfWeek.clone().subtract(1, "week")
+      );
+      weeklyStats.push({ ...item.toJSON(), ...stats });
+    }
+
+    // Get stats for this month
+    const monthlyItems = await DetailedTransaction.findAll({
+      attributes: ["itemId"],
+      include: [
+        {
+          model: Item,
+          attributes: ["itemId", "name"],
+          required: true,
+        },
+        {
+          model: Transaction,
+          attributes: [],
+          required: true,
+          where: {
+            cafeId: cafeId,
+            createdAt: {
+              [Op.between]: [startOfMonth.toDate(), endOfMonth.toDate()],
+            },
+          },
+        },
+      ],
+      group: ["DetailedTransaction.itemId", "Item.itemId"],
+      order: [[fn("COUNT", col("DetailedTransaction.itemId")), "DESC"]],
+    });
+
+    for (const item of monthlyItems) {
+      const itemId = item.itemId;
+      const stats = await getItemStats(
+        itemId,
+        startOfMonth,
+        endOfMonth,
+        startOfMonth.clone().subtract(1, "month"),
+        endOfMonth.clone().subtract(1, "month")
+      );
+      monthlyStats.push({ ...item.toJSON(), ...stats });
+    }
+
+    // Get stats for this year
+    const yearlyItems = await DetailedTransaction.findAll({
+      attributes: ["itemId"],
+      include: [
+        {
+          model: Item,
+          attributes: ["itemId", "name"],
+          required: true,
+        },
+        {
+          model: Transaction,
+          attributes: [],
+          required: true,
+          where: {
+            cafeId: cafeId,
+            createdAt: {
+              [Op.between]: [startOfYear.toDate(), endOfYear.toDate()],
+            },
+          },
+        },
+      ],
+      group: ["DetailedTransaction.itemId", "Item.itemId"],
+      order: [[fn("COUNT", col("DetailedTransaction.itemId")), "DESC"]],
+    });
+
+    for (const item of yearlyItems) {
+      const itemId = item.itemId;
+      const stats = await getItemStats(
+        itemId,
+        startOfYear,
+        endOfYear,
+        startOfYear.clone().subtract(1, "year"),
+        endOfYear.clone().subtract(1, "year")
+      );
+      yearlyStats.push({ ...item.toJSON(), ...stats });
+    }
+
+    // Send the response
+    res.status(200).json({
+      daily: dailyStats,
+      weekly: weeklyStats,
+      monthly: monthlyStats,
+      yearly: yearlyStats,
+    });
+  } catch (error) {
+    console.error("Error fetching best-selling items:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+exports.getTransactionTotalsWithPercentageChange = async (req, res) => {
+  const { cafeId } = req.params;
+
+  try {
+    // Helper function to get total count for a given time range
+    const getTotalCount = async (startDate, endDate) => {
+      return await DetailedTransaction.count({
+        include: [
+          {
+            model: Transaction,
+            attributes: [], // We don't need additional attributes from Transaction
+            required: true,
+            where: {
+              cafeId: cafeId,
+              createdAt: {
+                [Op.between]: [startDate, endDate],
+              },
+            },
+          },
+        ],
+      });
+    };
+
+    // Get today's date and calculate the ranges
+    const today = moment().startOf("day");
+    const startOfWeek = moment().startOf("week");
+    const startOfMonth = moment().startOf("month");
+    const startOfYear = moment().startOf("year");
+
+    const endOfDay = today.clone().endOf("day");
+    const endOfWeek = moment().endOf("week");
+    const endOfMonth = moment().endOf("month");
+    const endOfYear = moment().endOf("year");
+
+    // Get total counts for different periods
+    const todayCount = await getTotalCount(today.toDate(), endOfDay.toDate());
+    const weekCount = await getTotalCount(
+      startOfWeek.toDate(),
+      endOfWeek.toDate()
+    );
+    const monthCount = await getTotalCount(
+      startOfMonth.toDate(),
+      endOfMonth.toDate()
+    );
+    const yearCount = await getTotalCount(
+      startOfYear.toDate(),
+      endOfYear.toDate()
+    );
+
+    // Function to calculate percentage change
+    const calculatePercentageChange = (current, previous) => {
+      if (previous === 0) return current === 0 ? 0 : 100;
+      return Math.round(((current - previous) / previous) * 100);
+    };
+
+    // Get previous period counts for comparison
+    const previousDay = today.clone().subtract(1, "day");
+    const previousWeekStart = startOfWeek.clone().subtract(1, "week");
+    const previousWeekEnd = endOfWeek.clone().subtract(1, "week");
+    const previousMonthStart = startOfMonth.clone().subtract(1, "month");
+    const previousMonthEnd = endOfMonth.clone().subtract(1, "month");
+    const previousYearStart = startOfYear.clone().subtract(1, "year");
+    const previousYearEnd = endOfYear.clone().subtract(1, "year");
+
+    const previousDayCount = await getTotalCount(
+      previousDay.startOf("day").toDate(),
+      previousDay.endOf("day").toDate()
+    );
+    const previousWeekCount = await getTotalCount(
+      previousWeekStart.toDate(),
+      previousWeekEnd.toDate()
+    );
+    const previousMonthCount = await getTotalCount(
+      previousMonthStart.toDate(),
+      previousMonthEnd.toDate()
+    );
+    const previousYearCount = await getTotalCount(
+      previousYearStart.toDate(),
+      previousYearEnd.toDate()
+    );
+
+    // Calculate percentage changes and round to integers
+    const dayChange = calculatePercentageChange(todayCount, previousDayCount);
+    const weekChange = calculatePercentageChange(weekCount, previousWeekCount);
+    const monthChange = calculatePercentageChange(
+      monthCount,
+      previousMonthCount
+    );
+    const yearChange = calculatePercentageChange(yearCount, previousYearCount);
+
+    // Respond with totals and percentage changes in the specified format
+    res.status(200).json({
+      daily: [todayCount, dayChange],
+      weekly: [weekCount, weekChange],
+      monthly: [monthCount, monthChange],
+      yearly: [yearCount, yearChange],
+    });
+  } catch (error) {
+    console.error("Error fetching transaction totals:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

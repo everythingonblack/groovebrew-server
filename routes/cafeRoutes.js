@@ -10,7 +10,7 @@ router.post(
   cafeController.getCafeByUserId
 );
 router.post("/get-cafe/:cafeId", cafeController.getCafeById);
-router.post("/create", auth([1]), cafeController.createCafe);
+router.post("/create-cafe", auth([1]), cafeController.createCafe);
 router.put(
   "/set-cafe/:cafeId",
   auth([1]),

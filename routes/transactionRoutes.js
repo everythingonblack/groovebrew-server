@@ -21,6 +21,12 @@ router.get(
   auth([2]),
   transactionController.getTransactions
 );
+router.get("/get-income/:cafeId", transactionController.calculateIncome);
+router.get(
+  "/get-analytics/:cafeId",
+  transactionController.getTransactionTotalsWithPercentageChange
+);
+router.get("/get-favourite/:cafeId", transactionController.getBestSellingItems);
 router.post(
   "/confirm-transaction/:transactionId",
   auth([2]),

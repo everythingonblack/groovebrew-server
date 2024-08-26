@@ -16,7 +16,7 @@ const auth = (requiredRoles = null) => {
       let user = null;
       let session = null;
       console.log("dwadwadwadwadawdawdawdwa" + token + "aaa");
-      if (token) {
+      if (token != "null") {
         console.log("zzzzz" + token + "aaa");
         session = await Session.findOne({ where: { token, isValid: true } });
 

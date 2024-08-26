@@ -3,8 +3,8 @@ const { isAuthorizedForMaterial } = require("../middlewares/authHelpers");
 
 exports.createMaterialMutation = async (req, res) => {
   const { materialId } = req.params;
-  const { newStock, changeDate, reason } = req.body;
-
+  const { newStock, reason } = req.body;
+  console.log("bbbbbbbbbbb" + newStock);
   try {
     // Authorization check
     const authorized = await isAuthorizedForMaterial(req.user, materialId);

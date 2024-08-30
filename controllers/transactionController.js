@@ -571,7 +571,7 @@ exports.calculateIncome = async (req, res) => {
     const transactions = await Transaction.findAll({
       where: {
         cafeId: cafeId,
-        
+
         createdAt: {
           [Op.between]: [twoYearsAgo, today],
         },
@@ -1170,6 +1170,26 @@ exports.endCashTransaction = async (req, res) => {
     res.status(200).json(transaction);
   } catch (error) {
     console.error("Error updating table:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.createReport = async (req, res) => {
+  const { cafeId } = req.body;
+
+  try {
+    const newReport = await DailyReport.create({
+      cafeId,
+      reportDate,
+      favoriteItemId,
+      totalIncome,
+      transactionCount,
+      materialMutationIds,
+    });
+
+    res.status(201).json(newReport);
+  } catch (error) {
+    console.error("Error creating report:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

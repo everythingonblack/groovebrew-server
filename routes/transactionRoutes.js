@@ -21,12 +21,10 @@ router.get(
   auth([2]),
   transactionController.getTransactions
 );
-router.get("/get-income/:cafeId", transactionController.calculateIncome);
-router.get(
-  "/get-analytics/:cafeId",
-  transactionController.getTransactionTotalsWithPercentageChange
-);
-router.get("/get-favourite/:cafeId", transactionController.getBestSellingItems);
+
+// router.get("/get-income/:cafeId", transactionController.calculateIncome);
+router.post("/get-analytics/:cafeId", transactionController.getReport);
+// router.get("/get-favourite/:cafeId", transactionController.getBestSellingItems);
 router.post(
   "/confirm-transaction/:transactionId",
   auth([2]),
@@ -38,10 +36,15 @@ router.post(
   transactionController.declineTransaction
 );
 //if buyer is claim has paid the transaction
-router.get(
-  "/payment-claimed/:transactionId",
+router.post(
+  "/claim-transaction/:transactionId",
   auth([]),
-  transactionController.paymentClaimed
+  transactionController.claimIsCashlessPaidTransaction
+);
+router.post(
+  "/confirm-paid/:transactionId",
+  auth([2]),
+  transactionController.confirmIsCashlessPaidTransaction
 );
 router.post(
   "/fromGuestSide/:cafeId",

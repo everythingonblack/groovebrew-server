@@ -567,6 +567,17 @@ app.use("/mutation", materialMutationRoutes);
 app.use("/table", tableRoutes);
 app.use("/transaction", transactionRoutes);
 
+const cron = require("node-cron");
+const {
+  createReportForAllCafes,
+} = require("./controllers/transactionController");
+
+// Schedule a task to run every day at midnight
+cron.schedule("45 7 * * *", async () => {
+  console.log("Running daily report generation for all cafes...");
+  await createReportForAllCafes();
+});
+
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {

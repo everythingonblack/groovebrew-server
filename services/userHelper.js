@@ -134,7 +134,7 @@ function getAllClerk(cafeId) {
   return userList.filter((user) => user[3] == cafeId);
 }
 
-function sendMessageToAllClerk(cafeId, data) {
+function sendMessageToAllClerk(cafeId, event, data) {
   // Step 1: Filter userList to get users (clerks) with the specified cafeId
   console.log("ccccccccccccaaaaaaaaaaaafffffffffffffeeeeeeeeeee" + cafeId);
   const shopClerks = userList.filter((user) => user[3] == cafeId);
@@ -144,8 +144,16 @@ function sendMessageToAllClerk(cafeId, data) {
   // Step 2 & 3: Iterate over filtered users and send data through their socketId
   shopClerks.forEach((user) => {
     const socketId = user[2]; // Get the socketId from the user data
-    console.log(`Sending data to user with socketId ${socketId}`);
-    io.to(socketId).emit(data); // Emit data to the socketId using Socket.io
+    console.log(
+      `Sending data to user with socketId ${socketId} with data ${data}`
+    );
+    if (data !== undefined && data !== null) {
+      // Emit with data if provided
+      io.to(socketId).emit(event, data);
+    } else {
+      // Emit without data
+      io.to(socketId).emit(event);
+    }
   });
 }
 

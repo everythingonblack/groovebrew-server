@@ -16,7 +16,6 @@ module.exports = (sequelize, DataTypes) => {
       cafeId: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        // If there is a Cafe model, you can define the association in `associate` method
         references: {
           model: "Cafe", // Name of the table in the database
           key: "cafeId",
@@ -24,7 +23,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       favoriteItemId: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: "Item", // Name of the table in the database
           key: "itemId",
@@ -58,11 +57,11 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "DailyReport", // Ensures table name is used as-is
       freezeTableName: true,
+      timestamps: true, // Ensure timestamps are enabled
     }
   );
 
   DailyReport.associate = function (models) {
-    // Define associations if other models exist
     DailyReport.belongsTo(models.Cafe, { foreignKey: "cafeId" });
     DailyReport.belongsTo(models.Item, { foreignKey: "favoriteItemId" });
     // Add more associations if necessary

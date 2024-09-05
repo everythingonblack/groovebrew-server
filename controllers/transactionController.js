@@ -7,10 +7,13 @@ const {
   ItemType,
   Item,
   Table,
+  Material,
+  MaterialMutation,
+  DailyReport,
   sequelize,
 } = require("../models");
 const { Op, fn, col } = require("sequelize");
-
+const { Sequelize } = require("sequelize");
 const moment = require("moment");
 const { sendEmail } = require("../services/emailServices");
 const { generateUniqueUsername } = require("../helpers/createGuestHelper");
@@ -29,7 +32,6 @@ function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
-
 exports.transactionFromClerk = async (req, res) => {
   console.log("fromclerk");
   const { cafeId } = req.params;
@@ -195,11 +197,11 @@ exports.transactionFromGuestSide = async (req, res) => {
   } else {
     userId = user.userId;
   }
-
+  let newTransaction = null;
   try {
     await sequelize.transaction(async (t) => {
       // Create the main transaction record
-      const newTransaction = await Transaction.create(
+      newTransaction = await Transaction.create(
         {
           userId: userId,
           cafeId: cafeId,
@@ -246,7 +248,9 @@ exports.transactionFromGuestSide = async (req, res) => {
       }
     });
 
-    userHelper.sendMessageToAllClerk(cafeId, "transaction_created");
+    userHelper.sendMessageToAllClerk(cafeId, "transaction_created", {
+      transactionId: newTransaction.transactionId,
+    });
 
     res.status(201).json({ message: "Transactions created successfully" });
   } catch (error) {
@@ -298,11 +302,11 @@ exports.transactionFromGuestDevice = async (req, res) => {
   } else {
     userId = req.user.userId;
   }
-
+  let newTransaction = null;
   try {
     await sequelize.transaction(async (t) => {
       // Create the main transaction record
-      const newTransaction = await Transaction.create(
+      newTransaction = await Transaction.create(
         {
           userId: userId,
           cafeId: cafeId,
@@ -334,8 +338,14 @@ exports.transactionFromGuestDevice = async (req, res) => {
       }
     });
     socketId;
-    userHelper.sendMessageToAllClerk(cafeId, "transaction_created");
-    userHelper.sendMessageToSocket(socketId, "transaction_pending");
+    userHelper.sendMessageToAllClerk(cafeId, "transaction_created", {
+      transactionId: newTransaction.transactionId,
+    });
+    userHelper.sendMessageToSocket(
+      socketId,
+      "transaction_pending",
+      newTransaction.transactionId
+    );
 
     res.status(201).json({
       message: "Transactions created successfully",
@@ -402,7 +412,8 @@ exports.declineTransaction = async (req, res) => {
   }
 };
 
-exports.paymentClaimed = async (req, res) => {
+//for buyer (cashless)
+exports.claimIsCashlessPaidTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
   try {
@@ -424,6 +435,8 @@ exports.paymentClaimed = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+//for clerk (cash or cashless)
 exports.confirmIsCashlessPaidTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
@@ -464,7 +477,10 @@ exports.getTransaction = async (req, res) => {
     }
 
     // Check if the user is authorized to view this transaction
-    if (transaction.userId !== req.user.userId) {
+    if (
+      transaction.userId !== req.user.userId &&
+      transaction.cafeId != req.user.cafeId
+    ) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
@@ -1174,22 +1190,412 @@ exports.endCashTransaction = async (req, res) => {
   }
 };
 
-exports.createReport = async (req, res) => {
-  const { cafeId } = req.body;
+// exports.createReportForAllCafes = async () => {
+//   console.log("Starting report generation for all cafes...");
+//   try {
+//     // Fetch all cafes
+//     const cafes = await Cafe.findAll();
+
+//     // Create a report for each cafe
+//     for (const cafe of cafes) {
+//       try {
+//         await generateDailyReport(cafe.cafeId);
+//         console.log(`Report generated for cafeId: ${cafe.cafeId}`);
+//       } catch (err) {
+//         console.error(
+//           `Failed to generate report for cafeId: ${cafe.cafeId}`,
+//           err
+//         );
+//       }
+//     }
+//   } catch (error) {
+//     console.error("Error creating reports for all cafes:", error);
+//   }
+// };
+
+const getStartOfDay = () => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0); // Set to the start of the day
+  return now;
+};
+const generateDailyReport = async (cafeId) => {
+  const now = new Date();
+  const startOfDay = getStartOfDay();
 
   try {
+    // Find the favoriteItemId by most frequent itemId
+    const favoriteItem = await DetailedTransaction.findOne({
+      attributes: [
+        "itemId",
+        [sequelize.fn("COUNT", sequelize.col("itemId")), "count"],
+      ],
+      where: {
+        createdAt: {
+          [Op.between]: [startOfDay, now],
+        },
+      },
+      group: ["itemId"],
+      order: [[sequelize.fn("COUNT", sequelize.col("itemId")), "DESC"]],
+      limit: 1,
+    });
+
+    const favoriteItemId = favoriteItem ? favoriteItem.itemId : null;
+    const totalIncomeResult = await sequelize.query(
+      `
+      SELECT SUM(dt."qty" * i."price") AS totalIncome
+      FROM "DetailedTransaction" dt
+      JOIN "Item" i ON dt."itemId" = i."itemId"
+      WHERE dt."createdAt" BETWEEN :startOfDay AND :now
+        AND i."cafeId" = :cafeId
+      `,
+      {
+        replacements: { startOfDay, now, cafeId },
+        type: Sequelize.QueryTypes.SELECT,
+      }
+    );
+    const totalIncome = totalIncomeResult[0].totalIncome || 0;
+
+    // Count the transactionCount
+    const transactionCount = await Transaction.count({
+      where: {
+        cafeId,
+        createdAt: {
+          [Op.between]: [startOfDay, now],
+        },
+      },
+    });
+
+    // Find all MaterialMutation between the last 24 hours
+    const materialMutations = await MaterialMutation.findAll({
+      include: [
+        {
+          model: Material,
+          attributes: [], // No need to include Material fields in the result
+          where: { cafeId }, // Filter by cafeId in the Material table
+        },
+      ],
+      where: {
+        changeDate: {
+          [Op.between]: [startOfDay, now],
+        },
+      },
+    });
+
+    // Create a new daily report
     const newReport = await DailyReport.create({
       cafeId,
-      reportDate,
+      reportDate: now,
       favoriteItemId,
       totalIncome,
       transactionCount,
-      materialMutationIds,
+      materialMutationIds: materialMutations.map((m) => m.mutationId).join(","), // Join materialMutationIds with a comma
     });
 
-    res.status(201).json(newReport);
+    return newReport;
   } catch (error) {
     console.error("Error creating report:", error);
-    res.status(500).json({ error: "Internal server error" });
+    throw new Error("Internal server error");
   }
 };
+
+exports.getReport = async (req, res) => {
+  const { cafeId } = req.params;
+  const { type } = req.query; // "daily", "weekly", "monthly", "yearly"
+  let filter = type;
+  if (!["daily", "weekly", "monthly", "yearly"].includes(filter)) {
+    return res.status(400).json({ error: "Invalid filter type" });
+  }
+
+  const today = moment().startOf("day");
+  let currentStartDate, currentEndDate, previousStartDate, previousEndDate;
+
+  switch (filter) {
+    case "daily":
+      currentStartDate = today.clone().subtract(1, "days").startOf("day"); // yesterday
+      currentEndDate = today.clone().subtract(1, "days").endOf("day");
+      previousStartDate = today.clone().subtract(2, "days").startOf("day"); // day before yesterday
+      previousEndDate = today.clone().subtract(2, "days").endOf("day");
+      break;
+    case "weekly":
+      currentStartDate = today.clone().startOf("week").subtract(1, "week");
+      currentEndDate = today.clone().endOf("week").subtract(1, "week");
+      previousStartDate = today.clone().startOf("week").subtract(2, "week");
+      previousEndDate = today.clone().endOf("week").subtract(2, "week");
+      break;
+    case "monthly":
+      currentStartDate = today.clone().startOf("month").subtract(1, "month");
+      currentEndDate = today.clone().endOf("month").subtract(1, "month");
+      previousStartDate = today.clone().startOf("month").subtract(2, "month");
+      previousEndDate = today.clone().endOf("month").subtract(2, "month");
+      break;
+    case "yearly":
+      currentStartDate = today.clone().startOf("year").subtract(1, "year");
+      currentEndDate = today.clone().endOf("year").subtract(1, "year");
+      previousStartDate = today.clone().startOf("year").subtract(2, "year");
+      previousEndDate = today.clone().endOf("year").subtract(2, "year");
+      break;
+  }
+
+  try {
+    // Fetch data for both the current and previous periods
+    const reports = await DailyReport.findAll({
+      where: {
+        cafeId,
+        reportDate: {
+          [Op.between]: [
+            previousStartDate.format("YYYY-MM-DD"),
+            currentEndDate.format("YYYY-MM-DD"),
+          ],
+        },
+      },
+      attributes: [
+        "reportDate",
+        "favoriteItemId",
+        [sequelize.fn("SUM", sequelize.col("totalIncome")), "totalIncome"],
+        [
+          sequelize.fn("SUM", sequelize.col("transactionCount")),
+          "transactionCount",
+        ],
+      ],
+      group: ["reportDate", "favoriteItemId"],
+    });
+
+    // Initialize data structures for current and previous periods
+    const currentData = {
+      totalIncome: 0,
+      transactionCount: 0,
+      favoriteItems: {},
+    };
+    const previousData = {
+      totalIncome: 0,
+      transactionCount: 0,
+      favoriteItems: {},
+    };
+
+    reports.forEach((report) => {
+      const reportDate = moment(report.reportDate);
+      if (reportDate.isBetween(currentStartDate, currentEndDate, null, "[]")) {
+        currentData.totalIncome += parseFloat(report.totalIncome);
+        currentData.transactionCount += parseInt(report.transactionCount);
+        currentData.favoriteItems[report.favoriteItemId] =
+          (currentData.favoriteItems[report.favoriteItemId] || 0) + 1;
+      } else if (
+        reportDate.isBetween(previousStartDate, previousEndDate, null, "[]")
+      ) {
+        previousData.totalIncome += parseFloat(report.totalIncome);
+        previousData.transactionCount += parseInt(report.transactionCount);
+        previousData.favoriteItems[report.favoriteItemId] =
+          (previousData.favoriteItems[report.favoriteItemId] || 0) + 1;
+      }
+    });
+
+    // Compute favorite item for current and previous periods
+    const currentFavoriteItemId = Object.keys(currentData.favoriteItems).reduce(
+      (a, b) =>
+        currentData.favoriteItems[a] > currentData.favoriteItems[b] ? a : b,
+      null
+    );
+    const previousFavoriteItemId = Object.keys(
+      previousData.favoriteItems
+    ).reduce(
+      (a, b) =>
+        previousData.favoriteItems[a] > previousData.favoriteItems[b] ? a : b,
+      null
+    );
+
+    // Calculate growth
+    const incomeGrowth =
+      previousData.totalIncome > 0
+        ? ((currentData.totalIncome - previousData.totalIncome) /
+            previousData.totalIncome) *
+          100
+        : currentData.totalIncome > 0
+        ? 100
+        : 0;
+
+    const transactionGrowth =
+      previousData.transactionCount > 0
+        ? ((currentData.transactionCount - previousData.transactionCount) /
+            previousData.transactionCount) *
+          100
+        : currentData.transactionCount > 0
+        ? 100
+        : 0;
+
+    return res.json({
+      totalIncome: currentData.totalIncome,
+      transactionCount: currentData.transactionCount,
+      favoriteItemId: currentFavoriteItemId,
+      incomeGrowth,
+      transactionGrowth,
+    });
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ error: "An error occurred while retrieving the report" });
+  }
+};
+
+// const getDateRange = (type) => {
+//   const now = new Date();
+//   let startDate, endDate, previousStartDate, previousEndDate;
+
+//   switch (type) {
+//     case "daily":
+//       startDate = new Date(now.setHours(0, 0, 0, 0));
+//       endDate = new Date(startDate).setDate(startDate.getDate() + 1);
+//       previousStartDate = new Date(startDate).setDate(startDate.getDate() - 1);
+//       previousEndDate = new Date(startDate);
+//       break;
+//     case "weekly":
+//       const startOfWeek = now.getDate() - now.getDay(); // Adjust according to your start day of the week
+//       startDate = new Date(now.setDate(startOfWeek));
+//       endDate = new Date(startDate).setDate(startDate.getDate() + 7);
+//       previousStartDate = new Date(startDate).setDate(startDate.getDate() - 7);
+//       previousEndDate = new Date(startDate);
+//       break;
+//     case "monthly":
+//       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+//       endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+//       previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+//       previousEndDate = new Date(now.getFullYear(), now.getMonth(), 1);
+//       break;
+//     case "yearly":
+//       startDate = new Date(now.getFullYear(), 0, 1);
+//       endDate = new Date(now.getFullYear() + 1, 0, 1);
+//       previousStartDate = new Date(now.getFullYear() - 1, 0, 1);
+//       previousEndDate = new Date(now.getFullYear(), 0, 1);
+//       break;
+//     default:
+//       throw new Error("Invalid report type");
+//   }
+
+//   return {
+//     current: { startDate, endDate },
+//     previous: { startDate: previousStartDate, endDate: previousEndDate },
+//   };
+// };
+
+// const generateReportWithGrowth = async (cafeId, type) => {
+//   const { current, previous } = getDateRange(type);
+
+//   try {
+//     // Helper function to get the most favorite item ID for a given date range
+//     const getFavoriteItemId = async (startDate, endDate) => {
+//       const report = await DailyReport.findOne({
+//         attributes: [
+//           [fn("SUM", col("totalIncome")), "totalIncome"],
+//           "favoriteItemId",
+//         ],
+//         where: {
+//           reportDate: {
+//             [Op.between]: [startDate, endDate],
+//           },
+//           ...(cafeId ? { cafeId } : {}),
+//         },
+//         group: ["favoriteItemId"],
+//         order: [[fn("SUM", col("totalIncome")), "DESC"]],
+//         raw: true,
+//       });
+
+//       return report ? report.favoriteItemId : null;
+//     };
+
+//     // Fetch current period total income and favorite item
+//     const currentFavoriteItemId = await getFavoriteItemId(
+//       current.startDate,
+//       current.endDate
+//     );
+//     const currentIncomeResult = await DailyReport.findOne({
+//       attributes: [[fn("SUM", col("totalIncome")), "totalIncome"]],
+//       where: {
+//         reportDate: {
+//           [Op.between]: [current.startDate, current.endDate],
+//         },
+//         ...(cafeId ? { cafeId } : {}),
+//       },
+//       raw: true,
+//     });
+
+//     const currentTotalIncome = currentIncomeResult
+//       ? currentIncomeResult.totalIncome
+//       : 0;
+
+//     // Fetch previous period total income and favorite item
+//     const previousFavoriteItemId = await getFavoriteItemId(
+//       previous.startDate,
+//       previous.endDate
+//     );
+//     const previousIncomeResult = await DailyReport.findOne({
+//       attributes: [[fn("SUM", col("totalIncome")), "totalIncome"]],
+//       where: {
+//         reportDate: {
+//           [Op.between]: [previous.startDate, previous.endDate],
+//         },
+//         ...(cafeId ? { cafeId } : {}),
+//       },
+//       raw: true,
+//     });
+
+//     const previousTotalIncome = previousIncomeResult
+//       ? previousIncomeResult.totalIncome
+//       : 0;
+
+//     // Fetch favorite item details
+//     const currentFavoriteItem = currentFavoriteItemId
+//       ? await Item.findByPk(currentFavoriteItemId)
+//       : null;
+//     const previousFavoriteItem = previousFavoriteItemId
+//       ? await Item.findByPk(previousFavoriteItemId)
+//       : null;
+
+//     // Calculate growth percentage
+//     const growthPercentage =
+//       previousTotalIncome === 0
+//         ? currentTotalIncome > 0
+//           ? 100
+//           : 0
+//         : ((currentTotalIncome - previousTotalIncome) / previousTotalIncome) *
+//           100;
+
+//     return {
+//       currentTotalIncome,
+//       previousTotalIncome,
+//       growthPercentage,
+//       currentFavoriteItem: currentFavoriteItem
+//         ? {
+//             itemId: currentFavoriteItem.itemId,
+//             itemName: currentFavoriteItem.name,
+//             sold: currentTotalIncome,
+//           }
+//         : null,
+//       previousFavoriteItem: previousFavoriteItem
+//         ? {
+//             itemId: previousFavoriteItem.itemId,
+//             itemName: previousFavoriteItem.name,
+//             sold: previousTotalIncome,
+//           }
+//         : null,
+//     };
+//   } catch (error) {
+//     console.error("Error generating report with growth:", error);
+//     throw new Error("Internal server error");
+//   }
+// };
+
+// exports.getReport = async (req, res) => {
+//   const { type } = req.query; // type can be 'daily', 'weekly', 'monthly', 'yearly'
+//   const { cafeId } = req.params; // cafeId is expected as a query parameter
+
+//   if (!["daily", "weekly", "monthly", "yearly"].includes(type)) {
+//     return res.status(400).json({ error: "Invalid report type" });
+//   }
+
+//   try {
+//     const reportData = await generateReportWithGrowth(cafeId || null, type);
+//     res.status(200).json(reportData);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };

@@ -1311,29 +1311,35 @@ exports.getReport = async (req, res) => {
 
   switch (filter) {
     case "daily":
-      currentStartDate = today.clone().subtract(1, "days").startOf("day"); // yesterday
-      currentEndDate = today.clone().subtract(1, "days").endOf("day");
-      previousStartDate = today.clone().subtract(2, "days").startOf("day"); // day before yesterday
-      previousEndDate = today.clone().subtract(2, "days").endOf("day");
+      currentStartDate = today.clone().subtract(1, "days").startOf("day"); // 1 day back
+      currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
+      previousStartDate = today.clone().subtract(2, "days").startOf("day"); // 2 days back
+      previousEndDate = today.clone().subtract(2, "days").endOf("day"); // 2 days back
       break;
+
     case "weekly":
-      currentStartDate = today.clone().startOf("week").subtract(1, "week");
-      currentEndDate = today.clone().endOf("week").subtract(1, "week");
-      previousStartDate = today.clone().startOf("week").subtract(2, "week");
-      previousEndDate = today.clone().endOf("week").subtract(2, "week");
+      currentStartDate = today.clone().subtract(7, "days").startOf("day"); // 7 days back
+      currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back (end of last 7 days period)
+      previousStartDate = today.clone().subtract(14, "days").startOf("day"); // 14 days back
+      previousEndDate = today.clone().subtract(8, "days").endOf("day"); // 8 days back (end of the week before last)
       break;
+
     case "monthly":
-      currentStartDate = today.clone().startOf("month").subtract(1, "month");
-      currentEndDate = today.clone().endOf("month").subtract(1, "month");
-      previousStartDate = today.clone().startOf("month").subtract(2, "month");
-      previousEndDate = today.clone().endOf("month").subtract(2, "month");
+      currentStartDate = today.clone().subtract(30, "days").startOf("day"); // 30 days back
+      currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
+      previousStartDate = today.clone().subtract(60, "days").startOf("day"); // 60 days back
+      previousEndDate = today.clone().subtract(31, "days").endOf("day"); // 31 days back (end of the month before last)
       break;
+
     case "yearly":
-      currentStartDate = today.clone().startOf("year").subtract(1, "year");
-      currentEndDate = today.clone().endOf("year").subtract(1, "year");
-      previousStartDate = today.clone().startOf("year").subtract(2, "year");
-      previousEndDate = today.clone().endOf("year").subtract(2, "year");
+      currentStartDate = today.clone().subtract(365, "days").startOf("day"); // 365 days back
+      currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
+      previousStartDate = today.clone().subtract(730, "days").startOf("day"); // 730 days back
+      previousEndDate = today.clone().subtract(366, "days").endOf("day"); // 366 days back (end of the year before last)
       break;
+
+    default:
+      throw new Error("Invalid filter type");
   }
 
   try {
@@ -1357,9 +1363,12 @@ exports.getReport = async (req, res) => {
           "transactionCount",
         ],
       ],
-      group: ["reportDate", "favoriteItemId"],
+      group: ["reportDate", "favoriteItemId", "createdAt"],
+      order: [
+        ["createdAt", "ASC"], // or 'DESC' if you prefer descending order
+      ],
     });
-
+    console.log(reports);
     // Initialize data structures for current and previous periods
     const currentData = {
       totalIncome: 0,
@@ -1403,6 +1412,12 @@ exports.getReport = async (req, res) => {
       null
     );
 
+    // Fetch item details for the favorite items
+    const [currentFavoriteItem, previousFavoriteItem] = await Promise.all([
+      currentFavoriteItemId ? Item.findByPk(currentFavoriteItemId) : null,
+      previousFavoriteItemId ? Item.findByPk(previousFavoriteItemId) : null,
+    ]);
+
     // Calculate growth
     const incomeGrowth =
       previousData.totalIncome > 0
@@ -1425,7 +1440,12 @@ exports.getReport = async (req, res) => {
     return res.json({
       totalIncome: currentData.totalIncome,
       transactionCount: currentData.transactionCount,
-      favoriteItemId: currentFavoriteItemId,
+      currentFavoriteItem: currentFavoriteItem
+        ? { id: currentFavoriteItem.id, name: currentFavoriteItem.name }
+        : null,
+      previousFavoriteItem: previousFavoriteItem
+        ? { id: previousFavoriteItem.id, name: previousFavoriteItem.name }
+        : null,
       incomeGrowth,
       transactionGrowth,
     });

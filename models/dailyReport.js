@@ -43,6 +43,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING, // Consider using TEXT if the string can be very long
         allowNull: true,
       },
+      otherFavorites: {
+        type: DataTypes.STRING, // Comma-separated list of item IDs
+        allowNull: true,
+      },
       createdAt: {
         allowNull: false,
         type: DataTypes.DATE,
@@ -64,7 +68,9 @@ module.exports = (sequelize, DataTypes) => {
   DailyReport.associate = function (models) {
     DailyReport.belongsTo(models.Cafe, { foreignKey: "cafeId" });
     DailyReport.belongsTo(models.Item, { foreignKey: "favoriteItemId" });
-    // Add more associations if necessary
+    // If you need to reference other items in 'otherFavorites',
+    // you might need a more complex relationship, e.g., through a junction table
+    // or handle it separately.
   };
 
   return DailyReport;

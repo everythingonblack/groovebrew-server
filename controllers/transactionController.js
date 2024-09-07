@@ -1297,7 +1297,6 @@ const generateDailyReport = async (cafeId) => {
     throw new Error("Internal server error");
   }
 };
-
 exports.getReport = async (req, res) => {
   const { cafeId } = req.params;
   const { type } = req.query; // "daily", "weekly", "monthly", "yearly"
@@ -1311,31 +1310,31 @@ exports.getReport = async (req, res) => {
 
   switch (filter) {
     case "daily":
-      currentStartDate = today.clone().subtract(1, "days").startOf("day"); // 1 day back
-      currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
-      previousStartDate = today.clone().subtract(2, "days").startOf("day"); // 2 days back
-      previousEndDate = today.clone().subtract(2, "days").endOf("day"); // 2 days back
+      currentStartDate = today.clone().subtract(1, "days").startOf("day");
+      currentEndDate = today.clone().subtract(1, "days").endOf("day");
+      previousStartDate = today.clone().subtract(2, "days").startOf("day");
+      previousEndDate = today.clone().subtract(2, "days").endOf("day");
       break;
 
     case "weekly":
-      currentStartDate = today.clone().subtract(7, "days").startOf("day"); // 7 days back
-      currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back (end of last 7 days period)
-      previousStartDate = today.clone().subtract(14, "days").startOf("day"); // 14 days back
-      previousEndDate = today.clone().subtract(8, "days").endOf("day"); // 8 days back (end of the week before last)
+      currentStartDate = today.clone().subtract(7, "days").startOf("day");
+      currentEndDate = today.clone().subtract(1, "days").endOf("day");
+      previousStartDate = today.clone().subtract(14, "days").startOf("day");
+      previousEndDate = today.clone().subtract(8, "days").endOf("day");
       break;
 
     case "monthly":
-      currentStartDate = today.clone().subtract(30, "days").startOf("day"); // 30 days back
-      currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
-      previousStartDate = today.clone().subtract(60, "days").startOf("day"); // 60 days back
-      previousEndDate = today.clone().subtract(31, "days").endOf("day"); // 31 days back (end of the month before last)
+      currentStartDate = today.clone().subtract(30, "days").startOf("day");
+      currentEndDate = today.clone().subtract(1, "days").endOf("day");
+      previousStartDate = today.clone().subtract(60, "days").startOf("day");
+      previousEndDate = today.clone().subtract(31, "days").endOf("day");
       break;
 
     case "yearly":
-      currentStartDate = today.clone().subtract(365, "days").startOf("day"); // 365 days back
-      currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
-      previousStartDate = today.clone().subtract(730, "days").startOf("day"); // 730 days back
-      previousEndDate = today.clone().subtract(366, "days").endOf("day"); // 366 days back (end of the year before last)
+      currentStartDate = today.clone().subtract(365, "days").startOf("day");
+      currentEndDate = today.clone().subtract(1, "days").endOf("day");
+      previousStartDate = today.clone().subtract(730, "days").startOf("day");
+      previousEndDate = today.clone().subtract(366, "days").endOf("day");
       break;
 
     default:
@@ -1357,18 +1356,17 @@ exports.getReport = async (req, res) => {
       attributes: [
         "reportDate",
         "favoriteItemId",
+        "otherFavorites",
         [sequelize.fn("SUM", sequelize.col("totalIncome")), "totalIncome"],
         [
           sequelize.fn("SUM", sequelize.col("transactionCount")),
           "transactionCount",
         ],
       ],
-      group: ["reportDate", "favoriteItemId", "createdAt"],
-      order: [
-        ["createdAt", "ASC"], // or 'DESC' if you prefer descending order
-      ],
+      group: ["reportDate", "favoriteItemId", "otherFavorites", "createdAt"],
+      order: [["createdAt", "ASC"]],
     });
-    console.log(reports);
+
     // Initialize data structures for current and previous periods
     const currentData = {
       totalIncome: 0,
@@ -1383,27 +1381,40 @@ exports.getReport = async (req, res) => {
 
     reports.forEach((report) => {
       const reportDate = moment(report.reportDate);
+      const allFavorites = [
+        report.favoriteItemId,
+        ...report.otherFavorites.split(",").map(Number),
+      ];
+
       if (reportDate.isBetween(currentStartDate, currentEndDate, null, "[]")) {
         currentData.totalIncome += parseFloat(report.totalIncome);
         currentData.transactionCount += parseInt(report.transactionCount);
-        currentData.favoriteItems[report.favoriteItemId] =
-          (currentData.favoriteItems[report.favoriteItemId] || 0) + 1;
+        allFavorites.forEach((itemId) => {
+          currentData.favoriteItems[itemId] =
+            (currentData.favoriteItems[itemId] || 0) + 1;
+        });
       } else if (
         reportDate.isBetween(previousStartDate, previousEndDate, null, "[]")
       ) {
         previousData.totalIncome += parseFloat(report.totalIncome);
         previousData.transactionCount += parseInt(report.transactionCount);
-        previousData.favoriteItems[report.favoriteItemId] =
-          (previousData.favoriteItems[report.favoriteItemId] || 0) + 1;
+        allFavorites.forEach((itemId) => {
+          previousData.favoriteItems[itemId] =
+            (previousData.favoriteItems[itemId] || 0) + 1;
+        });
       }
     });
 
-    // Compute favorite item for current and previous periods
-    const currentFavoriteItemId = Object.keys(currentData.favoriteItems).reduce(
-      (a, b) =>
-        currentData.favoriteItems[a] > currentData.favoriteItems[b] ? a : b,
-      null
+    const totalFavoriteItems = Object.values(currentData.favoriteItems).reduce(
+      (acc, count) => acc + count,
+      0
     );
+
+    const currentFavoriteItems = Object.entries(currentData.favoriteItems)
+      .map(([itemId, count]) => ({ itemId: parseInt(itemId), count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Identify top favorite item for previous period
     const previousFavoriteItemId = Object.keys(
       previousData.favoriteItems
     ).reduce(
@@ -1413,10 +1424,39 @@ exports.getReport = async (req, res) => {
     );
 
     // Fetch item details for the favorite items
-    const [currentFavoriteItem, previousFavoriteItem] = await Promise.all([
-      currentFavoriteItemId ? Item.findByPk(currentFavoriteItemId) : null,
-      previousFavoriteItemId ? Item.findByPk(previousFavoriteItemId) : null,
-    ]);
+    const [currentFavoriteItemDetails, previousFavoriteItem] =
+      await Promise.all([
+        Item.findAll({
+          where: { itemId: currentFavoriteItems.map((item) => item.itemId) },
+        }),
+        previousFavoriteItemId ? Item.findByPk(previousFavoriteItemId) : null,
+      ]);
+
+    const currentFavoriteItemDetailsMap = currentFavoriteItemDetails.reduce(
+      (map, item) => {
+        map[item.itemId] = item.name;
+        return map;
+      },
+      {}
+    );
+
+    const enrichedCurrentFavoriteItems = currentFavoriteItems.map((item) => ({
+      itemId: item.itemId,
+      name: currentFavoriteItemDetailsMap[item.itemId],
+      count: item.count,
+      percentage:
+        totalFavoriteItems > 0
+          ? ((item.count / totalFavoriteItems) * 100).toFixed(2)
+          : 0,
+    }));
+
+    const enrichedPreviousFavoriteItem = previousFavoriteItem
+      ? {
+          itemId: previousFavoriteItem.itemId,
+          name: previousFavoriteItem.name,
+          count: previousData.favoriteItems[previousFavoriteItem.itemId],
+        }
+      : null;
 
     // Calculate growth
     const incomeGrowth =
@@ -1440,12 +1480,8 @@ exports.getReport = async (req, res) => {
     return res.json({
       totalIncome: currentData.totalIncome,
       transactionCount: currentData.transactionCount,
-      currentFavoriteItem: currentFavoriteItem
-        ? { id: currentFavoriteItem.id, name: currentFavoriteItem.name }
-        : null,
-      previousFavoriteItem: previousFavoriteItem
-        ? { id: previousFavoriteItem.id, name: previousFavoriteItem.name }
-        : null,
+      currentFavoriteItems: enrichedCurrentFavoriteItems,
+      previousFavoriteItem: enrichedPreviousFavoriteItem,
       incomeGrowth,
       transactionGrowth,
     });
@@ -1456,6 +1492,164 @@ exports.getReport = async (req, res) => {
       .json({ error: "An error occurred while retrieving the report" });
   }
 };
+// exports.getReport = async (req, res) => {
+//   const { cafeId } = req.params;
+//   const { type } = req.query; // "daily", "weekly", "monthly", "yearly"
+//   let filter = type;
+//   if (!["daily", "weekly", "monthly", "yearly"].includes(filter)) {
+//     return res.status(400).json({ error: "Invalid filter type" });
+//   }
+
+//   const today = moment().startOf("day");
+//   let currentStartDate, currentEndDate, previousStartDate, previousEndDate;
+
+//   switch (filter) {
+//     case "daily":
+//       currentStartDate = today.clone().subtract(1, "days").startOf("day"); // 1 day back
+//       currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
+//       previousStartDate = today.clone().subtract(2, "days").startOf("day"); // 2 days back
+//       previousEndDate = today.clone().subtract(2, "days").endOf("day"); // 2 days back
+//       break;
+
+//     case "weekly":
+//       currentStartDate = today.clone().subtract(7, "days").startOf("day"); // 7 days back
+//       currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back (end of last 7 days period)
+//       previousStartDate = today.clone().subtract(14, "days").startOf("day"); // 14 days back
+//       previousEndDate = today.clone().subtract(8, "days").endOf("day"); // 8 days back (end of the week before last)
+//       break;
+
+//     case "monthly":
+//       currentStartDate = today.clone().subtract(30, "days").startOf("day"); // 30 days back
+//       currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
+//       previousStartDate = today.clone().subtract(60, "days").startOf("day"); // 60 days back
+//       previousEndDate = today.clone().subtract(31, "days").endOf("day"); // 31 days back (end of the month before last)
+//       break;
+
+//     case "yearly":
+//       currentStartDate = today.clone().subtract(365, "days").startOf("day"); // 365 days back
+//       currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
+//       previousStartDate = today.clone().subtract(730, "days").startOf("day"); // 730 days back
+//       previousEndDate = today.clone().subtract(366, "days").endOf("day"); // 366 days back (end of the year before last)
+//       break;
+
+//     default:
+//       throw new Error("Invalid filter type");
+//   }
+
+//   try {
+//     // Fetch data for both the current and previous periods
+//     const reports = await DailyReport.findAll({
+//       where: {
+//         cafeId,
+//         reportDate: {
+//           [Op.between]: [
+//             previousStartDate.format("YYYY-MM-DD"),
+//             currentEndDate.format("YYYY-MM-DD"),
+//           ],
+//         },
+//       },
+//       attributes: [
+//         "reportDate",
+//         "favoriteItemId",
+//         [sequelize.fn("SUM", sequelize.col("totalIncome")), "totalIncome"],
+//         [
+//           sequelize.fn("SUM", sequelize.col("transactionCount")),
+//           "transactionCount",
+//         ],
+//       ],
+//       group: ["reportDate", "favoriteItemId", "createdAt"],
+//       order: [
+//         ["createdAt", "ASC"], // or 'DESC' if you prefer descending order
+//       ],
+//     });
+//     console.log(reports);
+//     // Initialize data structures for current and previous periods
+//     const currentData = {
+//       totalIncome: 0,
+//       transactionCount: 0,
+//       favoriteItems: {},
+//     };
+//     const previousData = {
+//       totalIncome: 0,
+//       transactionCount: 0,
+//       favoriteItems: {},
+//     };
+
+//     reports.forEach((report) => {
+//       const reportDate = moment(report.reportDate);
+//       if (reportDate.isBetween(currentStartDate, currentEndDate, null, "[]")) {
+//         currentData.totalIncome += parseFloat(report.totalIncome);
+//         currentData.transactionCount += parseInt(report.transactionCount);
+//         currentData.favoriteItems[report.favoriteItemId] =
+//           (currentData.favoriteItems[report.favoriteItemId] || 0) + 1;
+//       } else if (
+//         reportDate.isBetween(previousStartDate, previousEndDate, null, "[]")
+//       ) {
+//         previousData.totalIncome += parseFloat(report.totalIncome);
+//         previousData.transactionCount += parseInt(report.transactionCount);
+//         previousData.favoriteItems[report.favoriteItemId] =
+//           (previousData.favoriteItems[report.favoriteItemId] || 0) + 1;
+//       }
+//     });
+
+//     // Compute favorite item for current and previous periods
+//     const currentFavoriteItemId = Object.keys(currentData.favoriteItems).reduce(
+//       (a, b) =>
+//         currentData.favoriteItems[a] > currentData.favoriteItems[b] ? a : b,
+//       null
+//     );
+//     const previousFavoriteItemId = Object.keys(
+//       previousData.favoriteItems
+//     ).reduce(
+//       (a, b) =>
+//         previousData.favoriteItems[a] > previousData.favoriteItems[b] ? a : b,
+//       null
+//     );
+
+//     // Fetch item details for the favorite items
+//     const [currentFavoriteItem, previousFavoriteItem] = await Promise.all([
+//       currentFavoriteItemId ? Item.findByPk(currentFavoriteItemId) : null,
+//       previousFavoriteItemId ? Item.findByPk(previousFavoriteItemId) : null,
+//     ]);
+
+//     // Calculate growth
+//     const incomeGrowth =
+//       previousData.totalIncome > 0
+//         ? ((currentData.totalIncome - previousData.totalIncome) /
+//             previousData.totalIncome) *
+//           100
+//         : currentData.totalIncome > 0
+//         ? 100
+//         : 0;
+
+//     const transactionGrowth =
+//       previousData.transactionCount > 0
+//         ? ((currentData.transactionCount - previousData.transactionCount) /
+//             previousData.transactionCount) *
+//           100
+//         : currentData.transactionCount > 0
+//         ? 100
+//         : 0;
+
+//     return res.json({
+//       totalIncome: currentData.totalIncome,
+//       transactionCount: currentData.transactionCount,
+//       currentFavoriteItem: currentFavoriteItem
+//         ? { id: currentFavoriteItem.id, name: currentFavoriteItem.name }
+//         : null,
+//       previousFavoriteItem: previousFavoriteItem
+//         ? { id: previousFavoriteItem.id, name: previousFavoriteItem.name }
+//         : null,
+//       incomeGrowth,
+//       transactionGrowth,
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     return res
+//       .status(500)
+//       .json({ error: "An error occurred while retrieving the report" });
+//   }
+// };
 
 // const getDateRange = (type) => {
 //   const now = new Date();

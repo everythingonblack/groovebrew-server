@@ -1450,14 +1450,6 @@ exports.getReport = async (req, res) => {
           : 0,
     }));
 
-    const enrichedPreviousFavoriteItem = previousFavoriteItem
-      ? {
-          itemId: previousFavoriteItem.itemId,
-          name: previousFavoriteItem.name,
-          count: previousData.favoriteItems[previousFavoriteItem.itemId],
-        }
-      : null;
-
     // Calculate growth
     const incomeGrowth =
       previousData.totalIncome > 0
@@ -1481,7 +1473,9 @@ exports.getReport = async (req, res) => {
       totalIncome: currentData.totalIncome,
       transactionCount: currentData.transactionCount,
       currentFavoriteItems: enrichedCurrentFavoriteItems,
-      previousFavoriteItem: enrichedPreviousFavoriteItem,
+      previousFavoriteItem: previousFavoriteItem
+        ? { id: previousFavoriteItem.id, name: previousFavoriteItem.name }
+        : null,
       incomeGrowth,
       transactionGrowth,
     });

@@ -367,22 +367,31 @@ exports.confirmTransaction = async (req, res) => {
     if (transaction.cafeId != req.user.cafeId)
       return res.status(401).json({ error: "Unauthorized" });
 
-    if (transaction.payment_type == "cash") transaction.is_paid = true;
+    if (transaction.confirmed == 1) transaction.is_paid = true;
     // cashless transaction are waiting for guest to press "i have already paid", then the clerk press "is paid"
 
-    transaction.confirmed = 1;
+    //confirmed -1 = declined
+    //confirmed 0 = undecided
+    //confirmed 1 = available
+    //confirmed 2 = ispaid -> item being processed
+    //confirmed 3 = item ready
+    transaction.confirmed = transaction.confirmed + 1;
+
+    // Determine the event based on the updated confirmed value
+    let event;
+    if (transaction.confirmed === 1) {
+      event = "transaction_confirmed"; // Write 'transaction_success' if the confirmed value is 2
+    } else if (transaction.confirmed === 2) {
+      event = "transaction_success"; // Write 'transaction_success' if the confirmed value is 2
+    } else if (transaction.confirmed === 3) {
+      event = "transaction_end"; // Write 'transaction_end' if the confirmed value is 3
+    }
+
     await transaction.save();
 
-    if (transaction.payment_type == "cash")
-      userHelper.sendMessageToUser(transaction.userId, "transaction_success");
-    else
-      userHelper.sendMessageToUser(
-        transaction.userId,
-        "transaction_confirmed",
-        {
-          transactionId: transaction.transactionId,
-        }
-      );
+    userHelper.sendMessageToUser(transaction.userId, event, {
+      transactionId: transaction.transactionId,
+    });
 
     res.status(200).json(transaction);
   } catch (error) {
@@ -1342,6 +1351,47 @@ exports.getReport = async (req, res) => {
   }
 
   try {
+    let materialMutations = await MaterialMutation.findAll({
+      include: [
+        {
+          model: Material,
+          attributes: ["name", "unit"], // No need to include Material fields in the result
+          where: { cafeId }, // Filter by cafeId in the Material table
+        },
+      ],
+      where: {
+        changeDate: {
+          [Op.between]: [
+            currentStartDate.format("YYYY-MM-DD"),
+            currentEndDate.format("YYYY-MM-DD"),
+          ],
+        },
+      },
+    });
+
+    const groupedData = materialMutations.reduce((acc, mutation) => {
+      const materialId = mutation.materialId;
+      if (!acc[materialId]) {
+        acc[materialId] = {
+          name: mutation.Material.name,
+          unit: mutation.Material.unit,
+          mutations: [],
+        };
+      }
+      acc[materialId].mutations.push({
+        mutationId: mutation.mutationId,
+        oldStock: mutation.oldStock,
+        newStock: mutation.newStock,
+        changeDate: mutation.changeDate,
+        reason: mutation.reason,
+        createdAt: mutation.createdAt,
+        updatedAt: mutation.updatedAt,
+      });
+      return acc;
+    }, {});
+
+    // Step 2: Format the result as an array of materials with nested mutations
+    materialMutations = Object.values(groupedData);
     // Fetch data for both the current and previous periods
     const reports = await DailyReport.findAll({
       where: {
@@ -1478,6 +1528,7 @@ exports.getReport = async (req, res) => {
         : null,
       incomeGrowth,
       transactionGrowth,
+      materialMutations,
     });
   } catch (error) {
     console.error(error);

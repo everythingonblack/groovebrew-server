@@ -68,6 +68,10 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: false,
       },
+      notes: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
     },
     {
       tableName: "Transaction",

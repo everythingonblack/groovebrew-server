@@ -271,7 +271,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
   const cafe = await Cafe.findByPk(cafeId);
   if (!cafe) return res.status(404).json({ error: "Cafe not found" });
 
-  const { payment_type, serving_type, tableNo, transactions, socketId } =
+  const { payment_type, serving_type, tableNo, notes, transactions, socketId } =
     req.body;
   let paymentType = payment_type == "cash" ? "cash" : "cashless";
   let servingType = serving_type == "pickup" ? "pickup" : "serve";
@@ -315,6 +315,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
           confirmed: 0,
           tableId: servingType === "serve" ? tableId : null,
           is_paid: false,
+          notes: notes != null && notes,
         },
         { transaction: t }
       );
@@ -400,11 +401,53 @@ exports.confirmTransaction = async (req, res) => {
   }
 };
 
+exports.cancelTransaction = async (req, res) => {
+  const { transactionId } = req.params;
+
+  try {
+    const transaction = await Transaction.findByPk(transactionId, {
+      include: {
+        model: DetailedTransaction,
+        include: {
+          model: Item,
+        },
+      },
+    });
+    if (transaction.userId != req.user.userId)
+      return res.status(401).json({ error: "Unauthorized" });
+    transaction.confirmed = -2;
+    await transaction.save();
+
+    userHelper.sendMessageToAllClerk(
+      transaction.cafeId,
+      "transaction_canceled",
+      {
+        transactionId: transaction.transactionId,
+      }
+    );
+
+    userHelper.sendMessageToUser(transaction.userId, "transaction_canceled", {
+      transactionId: transaction.transactionId,
+    });
+
+    res.status(200).json(transaction);
+  } catch (error) {
+    console.error("Error updating table:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 exports.declineTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
   try {
-    const transaction = await Transaction.findByPk(transactionId);
+    const transaction = await Transaction.findByPk(transactionId, {
+      include: {
+        model: DetailedTransaction,
+        include: {
+          model: Item,
+        },
+      },
+    });
     if (transaction.cafeId != req.user.cafeId)
       return res.status(401).json({ error: "Unauthorized" });
     transaction.confirmed = -1;

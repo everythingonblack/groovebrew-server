@@ -50,6 +50,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         default: 0,
       },
+      availability: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+      },
     },
     {
       tableName: "Item",

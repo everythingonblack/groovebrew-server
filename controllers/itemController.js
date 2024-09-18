@@ -1,16 +1,16 @@
-const { Cafe, Item, ItemType } = require('../models');
-const multer = require('multer');
-const path = require('path');
-const itemtype = require('../models/itemtype');
+const { Cafe, Item, ItemType } = require("../models");
+const multer = require("multer");
+const path = require("path");
+const itemtype = require("../models/itemtype");
 
 // Set up multer for file upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, "uploads/");
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + path.extname(file.originalname));
-  }
+  },
 });
 
 const upload = multer({
@@ -18,16 +18,18 @@ const upload = multer({
   limits: { fileSize: 1024 * 1024 * 5 }, // 5 MB file size limit
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png/;
-    const extname = fileTypes.test(path.extname(file.originalname).toLowerCase());
+    const extname = fileTypes.test(
+      path.extname(file.originalname).toLowerCase()
+    );
     const mimeType = fileTypes.test(file.mimetype);
 
     if (extname && mimeType) {
       return cb(null, true);
     } else {
-      cb(new Error('Only images are allowed (jpeg, jpg, png).'));
+      cb(new Error("Only images are allowed (jpeg, jpg, png)."));
     }
-  }
-}).single('image');
+  },
+}).single("image");
 
 // Controller methods
 
@@ -44,11 +46,19 @@ exports.createItem = async (req, res) => {
     console.log(req.cafe.cafeId);
 
     try {
-      const newItem = await Item.create({ stock, itemTypeId, cafeId: req.cafe.cafeId, name, description, image, price });
+      const newItem = await Item.create({
+        stock,
+        itemTypeId,
+        cafeId: req.cafe.cafeId,
+        name,
+        description,
+        image,
+        price,
+      });
       console.log(newItem);
       res.status(201).json(newItem);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to create item' });
+      res.status(500).json({ error: "Failed to create item" });
     }
   });
 };
@@ -59,11 +69,11 @@ exports.getItems = async (req, res) => {
 
   try {
     const items = await Item.findAll({
-      where: { cafeId }
+      where: { cafeId },
     });
     res.status(200).json(items);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve items' });
+    res.status(500).json({ error: "Failed to retrieve items" });
   }
 };
 
@@ -76,10 +86,10 @@ exports.getItemById = async (req, res) => {
     if (item) {
       res.status(200).json(item);
     } else {
-      res.status(404).json({ error: 'Item not found' });
+      res.status(404).json({ error: "Item not found" });
     }
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve item' });
+    res.status(500).json({ error: "Failed to retrieve item" });
   }
 };
 
@@ -105,10 +115,10 @@ exports.updateItem = async (req, res) => {
         await item.save();
         res.status(200).json(item);
       } else {
-        res.status(404).json({ error: 'Item not found' });
+        res.status(404).json({ error: "Item not found" });
       }
     } catch (error) {
-      res.status(500).json({ error: 'Failed to update item' });
+      res.status(500).json({ error: "Failed to update item" });
     }
   });
 };
@@ -121,15 +131,14 @@ exports.deleteItem = async (req, res) => {
     const item = await Item.findByPk(itemId);
     if (item) {
       await item.destroy();
-      res.status(200).json({ message: 'Item deleted' });
+      res.status(200).json({ message: "Item deleted" });
     } else {
-      res.status(404).json({ error: 'Item not found' });
+      res.status(404).json({ error: "Item not found" });
     }
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete item' });
+    res.status(500).json({ error: "Failed to delete item" });
   }
 };
-
 
 exports.getItemType = async (req, res) => {
   const { cafeId } = req.params;
@@ -139,8 +148,8 @@ exports.getItemType = async (req, res) => {
 
     res.status(201).json(type);
   } catch (error) {
-    console.error('Error creating cafe:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -152,11 +161,10 @@ exports.createItemType = async (req, res) => {
 
     res.status(201).json(type);
   } catch (error) {
-    console.error('Error creating cafe:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
-
 
 exports.createItemType = async (req, res) => {
   upload(req, res, async (err) => {
@@ -168,12 +176,16 @@ exports.createItemType = async (req, res) => {
     const image = req.file ? req.file.path : null;
 
     try {
-      const newItemType = await ItemType.create({ name, cafeId: req.cafe.cafeId, image });
+      const newItemType = await ItemType.create({
+        name,
+        cafeId: req.cafe.cafeId,
+        image,
+      });
       console.log(newItemType);
       res.status(201).json(newItemType);
     } catch (error) {
-      console.error('Failed to create item type:', error);
-      res.status(500).json({ error: 'Failed to create itemType' });
+      console.error("Failed to create item type:", error);
+      res.status(500).json({ error: "Failed to create itemType" });
     }
   });
 };
@@ -188,8 +200,23 @@ exports.updateItemType = async (req, res) => {
     await type.save();
     res.status(201).json(type);
   } catch (error) {
-    console.error('Error creating cafe:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.setAvailability = async (req, res) => {
+  const { itemId } = req.params;
+  const { isAvailable } = req.body;
+
+  try {
+    const item = await Item.findByPk(itemId);
+    item.availability = isAvailable;
+    await item.save();
+    res.status(201).json(item);
+  } catch (error) {
+    console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -201,13 +228,13 @@ exports.deleteItemType = async (req, res) => {
 
     if (type) {
       await type.destroy();
-      res.status(200).json({ message: 'Item deleted' });
+      res.status(200).json({ message: "Item deleted" });
     } else {
-      res.status(404).json({ error: 'Item not found' });
+      res.status(404).json({ error: "Item not found" });
     }
   } catch (error) {
-    console.error('Error creating cafe:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -216,20 +243,22 @@ exports.getItemTypesWithItems = async (req, res) => {
 
   try {
     const cafe = await Cafe.findByPk(cafeId);
-    if(!cafe) return res.status(404).json({ error: 'Cafe not found' });
-    
+    if (!cafe) return res.status(404).json({ error: "Cafe not found" });
+
     const itemTypes = await ItemType.findAll({
       where: { cafeId },
-      include: [{
-        model: Item,
-        as: 'itemList'
-      }]
+      include: [
+        {
+          model: Item,
+          as: "itemList",
+        },
+      ],
     });
 
-    res.status(200).json({cafe: cafe, data: itemTypes});
+    res.status(200).json({ cafe: cafe, data: itemTypes });
   } catch (error) {
-    console.error('Error fetching item types with items:', error);
-    res.status(500).json({ error: 'Failed to retrieve item types with items' });
+    console.error("Error fetching item types with items:", error);
+    res.status(500).json({ error: "Failed to retrieve item types with items" });
   }
 };
 
@@ -239,18 +268,18 @@ exports.getCartDetails = async (req, res) => {
 
   try {
     // Extract itemIds from cartItems
-    const itemIds = cartItems.map(item => item.itemId);
+    const itemIds = cartItems.map((item) => item.itemId);
 
     // Fetch items from the database
     const items = await Item.findAll({
       where: {
         itemId: itemIds,
-        cafeId: cafeId
+        cafeId: cafeId,
       },
       include: {
         model: ItemType,
-        attributes: ['itemTypeId', 'name']
-      }
+        attributes: ["itemTypeId", "name"],
+      },
     });
 
     // Group items by their type
@@ -262,7 +291,7 @@ exports.getCartDetails = async (req, res) => {
           cafeId: item.cafeId,
           typeName: item.ItemType.name,
           // imageUrl: item.ItemType.imageUrl,
-          itemList: []
+          itemList: [],
         };
       }
       acc[itemTypeId].itemList.push({
@@ -270,7 +299,7 @@ exports.getCartDetails = async (req, res) => {
         price: item.price,
         name: item.name,
         image: item.image,
-        qty: cartItems.find(cartItem => cartItem.itemId === item.itemId).qty
+        qty: cartItems.find((cartItem) => cartItem.itemId === item.itemId).qty,
       });
       return acc;
     }, {});
@@ -280,7 +309,7 @@ exports.getCartDetails = async (req, res) => {
 
     res.status(200).json(itemTypes);
   } catch (error) {
-    console.error('Error fetching cart details:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error fetching cart details:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };

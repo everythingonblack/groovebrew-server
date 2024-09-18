@@ -35,6 +35,11 @@ router.post(
   auth([2]),
   transactionController.declineTransaction
 );
+router.post(
+  "/cancel-transaction/:transactionId",
+  auth([]),
+  transactionController.cancelTransaction
+);
 //if buyer is claim has paid the transaction
 router.post(
   "/claim-transaction/:transactionId",

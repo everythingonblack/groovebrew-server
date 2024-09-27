@@ -27,7 +27,7 @@ router.delete(
 ); // Delete an item by its ID
 router.put(
   "/set-availability/:itemId",
-  auth([1]),
+  auth([1, 2]),
   itemController.setAvailability
 ); // Update an item by its ID
 

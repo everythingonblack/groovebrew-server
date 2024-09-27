@@ -24,4 +24,10 @@ router.post(
   cafeController.deleteCafe
 );
 
+router.put(
+  "/confirmation-status/:cafeId",
+  auth([1]),
+  cafeController.setIsNeedConfirmation
+); // Update an item by its ID
+
 module.exports = router;

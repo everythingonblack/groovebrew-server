@@ -5,6 +5,8 @@ const path = require("path");
 const dotenv = require("dotenv");
 const socketIo = require("socket.io");
 const querystring = require("querystring");
+const webPush = require("web-push");
+const { addSubscription } = require("./services/notificationSender");
 
 dotenv.config();
 
@@ -37,6 +39,24 @@ const authController = require("./controllers/authController");
 const { User, Cafe, Session } = require("./models");
 
 app.use(express.json());
+
+const vapidKeys = webPush.generateVAPIDKeys();
+webPush.setVapidDetails(
+  "mailto:example@yourdomain.com",
+  vapidKeys.publicKey,
+  vapidKeys.privateKey
+);
+
+// Endpoint to get VAPID public key
+app.get("/vapid-public-key", (req, res) => {
+  res.json({ publicKey: vapidKeys.publicKey });
+});
+
+app.post("/subscribe", (req, res) => {
+  const { userId, subscription } = req.body;
+  addSubscription(userId, subscription);
+  res.status(201).json({});
+});
 
 function generateRandomString(length) {
   return Array.from({ length }, () => {

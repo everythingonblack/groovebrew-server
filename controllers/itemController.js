@@ -211,9 +211,14 @@ exports.setAvailability = async (req, res) => {
 
   try {
     const item = await Item.findByPk(itemId);
-    item.availability = isAvailable;
-    await item.save();
-    res.status(201).json(item);
+    const cafe = await Cafe.findByPk(item.cafeId);
+    console.log(item);
+    console.log(cafe);
+    if (item.cafeId == req.user.cafeId || req.user.userId == cafe.cafeId) {
+      item.availability = isAvailable;
+      await item.save();
+      res.status(201).json(item);
+    } else return res.status(201).json(item);
   } catch (error) {
     console.error("Error creating cafe:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -300,6 +305,7 @@ exports.getCartDetails = async (req, res) => {
         name: item.name,
         image: item.image,
         qty: cartItems.find((cartItem) => cartItem.itemId === item.itemId).qty,
+        availability: item.availability,
       });
       return acc;
     }, {});

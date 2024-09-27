@@ -123,6 +123,25 @@ exports.deleteCafe = async (req, res) => {
   }
 };
 
+exports.setIsNeedConfirmation = async (req, res) => {
+  const { cafeId } = req.params;
+  const { isNeedConfirmation } = req.body;
+
+  try {
+    const cafe = await Cafe.findByPk(cafeId);
+    console.log(cafe);
+    if (req.user.userId == cafe.ownerId) {
+      console.log(isNeedConfirmation);
+      cafe.needsConfirmation = isNeedConfirmation;
+      await cafe.save();
+      res.status(201).json(cafe);
+    } else return res.status(201).json(cafe);
+  } catch (error) {
+    console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 // Get cafes by user ID (for super admin or authorized users)
 exports.getCafeByUserId = async (req, res) => {
   const { userId } = req.params;

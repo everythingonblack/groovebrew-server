@@ -1,5 +1,6 @@
 const { User } = require("../models");
 const { io } = require("../index");
+const { sendNotifications } = require("./notificationSender");
 
 // [this is guestSide socketId, this is the code for qr]
 const qrCodeSocketMap = {};
@@ -147,23 +148,15 @@ function sendMessageToAllClerk(cafeId, event, data) {
     console.log(
       `Sending data to user with socketId ${socketId} with data ${data}`
     );
-    if (data !== undefined && data !== null) {
-      // Emit with data if provided
-      io.to(socketId).emit(event, data);
-    } else {
-      // Emit without data
-      io.to(socketId).emit(event);
-    }
+    io.to(socketId).emit(event, data || {});
+    sendNotificationsToUser(user[1], data);
   });
 }
 
 function sendMessageToSocket(socketId, event, data) {
   if (data !== undefined && data !== null) {
     // Emit with data if provided
-    io.to(socketId).emit(event, data);
-  } else {
-    // Emit without data
-    io.to(socketId).emit(event);
+    io.to(socketId).emit(event, data || {});
   }
 }
 

@@ -25,15 +25,17 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       xposition: {
-        type: DataTypes.DECIMAL(10, 2), // Changed to DECIMAL with 2 decimal places
+        type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
+        defaultValue: 50,
       },
       yposition: {
-        type: DataTypes.DECIMAL(10, 2), // Changed to DECIMAL with 2 decimal places
+        type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
+        defaultValue: 50,
       },
       scale: {
-        type: DataTypes.DECIMAL(10, 2), // Changed to DECIMAL with 2 decimal places
+        type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
       },
       ownerId: {
@@ -43,6 +45,12 @@ module.exports = (sequelize, DataTypes) => {
           model: "User",
           key: "userId",
         },
+      },
+      needsConfirmation: {
+        // New field for confirmation status
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false, // Default to false (not needing confirmation)
       },
       createdAt: {
         allowNull: false,

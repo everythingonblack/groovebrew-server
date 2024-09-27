@@ -312,7 +312,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
           cafeId: cafeId,
           payment_type: paymentType,
           serving_type: servingType,
-          confirmed: 0,
+          confirmed: cafe.needsConfirmation ? 0 : 1,
           tableId: servingType === "serve" ? tableId : null,
           is_paid: false,
           notes: notes != null && notes,
@@ -342,11 +342,12 @@ exports.transactionFromGuestDevice = async (req, res) => {
     userHelper.sendMessageToAllClerk(cafeId, "transaction_created", {
       transactionId: newTransaction.transactionId,
     });
-    userHelper.sendMessageToSocket(
-      socketId,
-      "transaction_pending",
-      newTransaction.transactionId
-    );
+    const event = cafe.needsConfirmation
+      ? "transaction_pending"
+      : "transaction_confirmed";
+    userHelper.sendMessageToSocket(socketId, event, {
+      transactionId: newTransaction.transactionId,
+    });
 
     res.status(201).json({
       message: "Transactions created successfully",
@@ -405,14 +406,8 @@ exports.cancelTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
   try {
-    const transaction = await Transaction.findByPk(transactionId, {
-      include: {
-        model: DetailedTransaction,
-        include: {
-          model: Item,
-        },
-      },
-    });
+    const transaction = await Transaction.findByPk(transactionId);
+    console.log(transaction);
     if (transaction.userId != req.user.userId)
       return res.status(401).json({ error: "Unauthorized" });
     transaction.confirmed = -2;
@@ -425,7 +420,6 @@ exports.cancelTransaction = async (req, res) => {
         transactionId: transaction.transactionId,
       }
     );
-
     userHelper.sendMessageToUser(transaction.userId, "transaction_canceled", {
       transactionId: transaction.transactionId,
     });

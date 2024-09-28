@@ -161,9 +161,9 @@ async function sendMessageToAllClerk(cafeId, event, data) {
   const users = await User.findAll({
     where: { cafeId: cafeId },
   });
-
+  const c = Math.random();
   users.forEach((user) => {
-    console.log(user);
+    console.log(c);
     sendNotifications(user.userId, payload);
   });
 }

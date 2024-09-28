@@ -286,7 +286,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
     tableId = table.tableId;
   }
 
-  let userId;
+  let user = { userId: 0 };
   if (!req.user) {
     // Create user with a default password
     const newUsername = await generateUniqueUsername();
@@ -295,12 +295,12 @@ exports.transactionFromGuestDevice = async (req, res) => {
       password: "unsetunsetunset",
       roleId: 3,
     });
-    userId = newUser.userId;
+    user = newUser;
 
     //because new user hasnt logged on socket list with its own userId
-    userHelper.logUnloggedUserSocket(userId, socketId);
+    userHelper.logUnloggedUserSocket(user.userId, socketId);
   } else {
-    userId = req.user.userId;
+    user.userId = req.user.userId;
   }
   let newTransaction = null;
   try {
@@ -308,7 +308,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
       // Create the main transaction record
       newTransaction = await Transaction.create(
         {
-          userId: userId,
+          userId: user.userId,
           cafeId: cafeId,
           payment_type: paymentType,
           serving_type: servingType,
@@ -335,7 +335,19 @@ exports.transactionFromGuestDevice = async (req, res) => {
       await Promise.all(detailedTransactions);
 
       if (!req.user) {
-        await Session.create({ userId: userId, token }, { transaction: t });
+        await Session.create(
+          { userId: user.userId, token },
+          { transaction: t }
+        );
+
+        userHelper.sendMessageToSocket(socketId, "checkUserTokenRes", {
+          status: 200,
+          message: "checking token success",
+          data: {
+            user: user,
+            valid: true,
+          },
+        });
       }
     });
     socketId;

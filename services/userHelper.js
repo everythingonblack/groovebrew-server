@@ -1,6 +1,6 @@
 const { User } = require("../models");
 const { io } = require("../index");
-const { sendNotifications } = require("./notificationSender");
+const { sendNotifications } = require("./notificationServices");
 
 // [this is guestSide socketId, this is the code for qr]
 const qrCodeSocketMap = {};
@@ -149,7 +149,14 @@ function sendMessageToAllClerk(cafeId, event, data) {
       `Sending data to user with socketId ${socketId} with data ${data}`
     );
     io.to(socketId).emit(event, data || {});
-    sendNotificationsToUser(user[1], data);
+    const payload = JSON.stringify({
+      title: "New Transaction",
+      body: "You have a new transaction!",
+      cafeId: data.cafeId,
+      transactionId: data.transactionId, // Include your transaction ID here
+    });
+
+    sendNotifications(payload);
   });
 }
 

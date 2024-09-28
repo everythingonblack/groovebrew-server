@@ -340,6 +340,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
     });
     socketId;
     userHelper.sendMessageToAllClerk(cafeId, "transaction_created", {
+      cafeId: newTransaction.cafeId,
       transactionId: newTransaction.transactionId,
     });
     const event = cafe.needsConfirmation

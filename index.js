@@ -5,9 +5,7 @@ const path = require("path");
 const dotenv = require("dotenv");
 const socketIo = require("socket.io");
 const querystring = require("querystring");
-const webPush = require("web-push");
-const { addSubscription } = require("./services/notificationSender");
-
+const webpush = require("web-push");
 dotenv.config();
 
 const app = express();
@@ -22,6 +20,8 @@ const io = socketIo(server, {
   },
 });
 module.exports = { io };
+
+const subscriptionService = require("./services/subscriptionService");
 const SpotifyService = require("./services/SpotifyService");
 const userHelper = require("./services/userHelper");
 
@@ -40,21 +40,23 @@ const { User, Cafe, Session } = require("./models");
 
 app.use(express.json());
 
-const vapidKeys = webPush.generateVAPIDKeys();
-webPush.setVapidDetails(
-  "mailto:example@yourdomain.com",
+// Generate VAPID keys (do this once and store the keys securely)
+const vapidKeys = webpush.generateVAPIDKeys();
+webpush.setVapidDetails(
+  "mailto:your-email@example.com",
   vapidKeys.publicKey,
   vapidKeys.privateKey
 );
 
-// Endpoint to get VAPID public key
-app.get("/vapid-public-key", (req, res) => {
-  res.json({ publicKey: vapidKeys.publicKey });
+// Endpoint to serve the public VAPID key
+app.get("/vapid-key", (req, res) => {
+  res.json({ publicVapidKey: vapidKeys.publicKey });
 });
 
+// Endpoint to store subscription
 app.post("/subscribe", (req, res) => {
-  const { userId, subscription } = req.body;
-  addSubscription(userId, subscription);
+  const subscription = req.body;
+  subscriptionService.addSubscription(subscription);
   res.status(201).json({});
 });
 

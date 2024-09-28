@@ -13,12 +13,14 @@ const sendNotification = (subscription, payload) => {
     });
 };
 
-const sendNotifications = (payload) => {
-  const subscriptions = subscriptionService.getSubscriptions();
+const sendNotifications = (userId, payload) => {
+  const subscriptions = subscriptionService.getSubscriptionsByUserId(userId);
   subscriptions.forEach((subscription) => {
     try {
       sendNotification(subscription, payload);
-    } catch {}
+    } catch (error) {
+      console.error("Error during sending notification:", error);
+    }
   });
 };
 

@@ -135,7 +135,7 @@ function getAllClerk(cafeId) {
   return userList.filter((user) => user[3] == cafeId);
 }
 
-function sendMessageToAllClerk(cafeId, event, data) {
+async function sendMessageToAllClerk(cafeId, event, data) {
   // Step 1: Filter userList to get users (clerks) with the specified cafeId
   console.log("ccccccccccccaaaaaaaaaaaafffffffffffffeeeeeeeeeee" + cafeId);
   const shopClerks = userList.filter((user) => user[3] == cafeId);
@@ -149,14 +149,22 @@ function sendMessageToAllClerk(cafeId, event, data) {
       `Sending data to user with socketId ${socketId} with data ${data}`
     );
     io.to(socketId).emit(event, data || {});
-    const payload = JSON.stringify({
-      title: "New Transaction",
-      body: "You have a new transaction!",
-      cafeId: data.cafeId,
-      transactionId: data.transactionId, // Include your transaction ID here
-    });
+  });
 
-    sendNotifications(payload);
+  const payload = JSON.stringify({
+    title: "New Transaction",
+    body: "You have a new transaction!",
+    cafeId: data.cafeId,
+    transactionId: data.transactionId, // Include your transaction ID here
+  });
+
+  const users = await User.findAll({
+    where: { cafeId: cafeId },
+  });
+
+  users.forEach((user) => {
+    console.log(user);
+    sendNotifications(user.userId, payload);
   });
 }
 

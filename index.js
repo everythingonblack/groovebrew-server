@@ -50,13 +50,15 @@ webpush.setVapidDetails(
 
 // Endpoint to serve the public VAPID key
 app.get("/vapid-key", (req, res) => {
+  console.log("getting key" + vapidKeys.publicKey);
   res.json({ publicVapidKey: vapidKeys.publicKey });
 });
 
 // Endpoint to store subscription
 app.post("/subscribe", (req, res) => {
-  const subscription = req.body;
-  subscriptionService.addSubscription(subscription);
+  const { subscription, token } = req.body;
+  subscriptionService.addSubscription(subscription, token);
+  console.log("subscribing" + subscription + " " + token);
   res.status(201).json({});
 });
 

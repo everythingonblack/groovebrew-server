@@ -339,15 +339,6 @@ exports.transactionFromGuestDevice = async (req, res) => {
           { userId: user.userId, token },
           { transaction: t }
         );
-
-        userHelper.sendMessageToSocket(socketId, "checkUserTokenRes", {
-          status: 200,
-          message: "checking token success",
-          data: {
-            user: user,
-            valid: true,
-          },
-        });
       }
     });
     socketId;
@@ -361,7 +352,16 @@ exports.transactionFromGuestDevice = async (req, res) => {
     userHelper.sendMessageToSocket(socketId, event, {
       transactionId: newTransaction.transactionId,
     });
-
+    // if (!req.user) {
+    //   userHelper.sendMessageToSocket(socketId, "checkUserTokenRes", {
+    //     status: 200,
+    //     message: "checking token success",
+    //     data: {
+    //       user: user,
+    //       valid: true,
+    //     },
+    //   });
+    // }
     res.status(201).json({
       message: "Transactions created successfully",
       newUser: req.user == null,
@@ -378,6 +378,7 @@ exports.confirmTransaction = async (req, res) => {
 
   try {
     const transaction = await Transaction.findByPk(transactionId);
+    if (transaction.confirmed == 3) return;
 
     if (transaction.cafeId != req.user.cafeId)
       return res.status(401).json({ error: "Unauthorized" });

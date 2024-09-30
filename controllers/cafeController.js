@@ -43,6 +43,8 @@ exports.updateCafe = async (req, res) => {
 
     const { cafeId } = req.params;
     const { name, xposition, yposition, scale } = req.body;
+    console.log(req.body);
+
     const qrBackground = req.files["qrBackground"]
       ? req.files["qrBackground"][0].path
       : null;
@@ -53,12 +55,14 @@ exports.updateCafe = async (req, res) => {
     try {
       const cafe = await Cafe.findByPk(cafeId);
       if (cafe) {
-        cafe.name = name || cafe.name;
-        cafe.qrBackground = qrBackground || cafe.qrBackground;
-        cafe.qrPayment = qrPayment || cafe.qrPayment;
-        cafe.xposition = xposition || cafe.xposition;
-        cafe.yposition = yposition || cafe.yposition;
-        cafe.scale = scale || cafe.scale;
+        // Use existing data if new data is undefined
+        cafe.name = name !== undefined ? name : cafe.name;
+        cafe.qrBackground =
+          qrBackground !== null ? qrBackground : cafe.qrBackground;
+        cafe.qrPayment = qrPayment !== null ? qrPayment : cafe.qrPayment;
+        cafe.xposition = xposition != "undefined" ? xposition : cafe.xposition;
+        cafe.yposition = yposition != "undefined" ? yposition : cafe.yposition;
+        cafe.scale = scale != undefined ? scale : cafe.scale;
 
         await cafe.save();
         res.status(200).json(cafe);

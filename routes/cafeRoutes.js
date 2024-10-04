@@ -17,6 +17,13 @@ router.put(
   checkCafeOwnership,
   cafeController.updateCafe
 );
+
+router.post(
+  "/welcome-config/:cafeId",
+  auth([1]),
+  checkCafeOwnership,
+  cafeController.updateCafeWelcomePageConfig
+);
 router.post(
   "/rm-cafe/:cafeId",
   auth([1]),

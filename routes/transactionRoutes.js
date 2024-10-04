@@ -17,6 +17,11 @@ router.get(
   transactionController.getTransaction
 );
 router.get(
+  "/get-my-transactions",
+  auth([]),
+  transactionController.getMyTransactions
+);
+router.get(
   "/get-transactions/:cafeId",
   auth([2]),
   transactionController.getTransactions

@@ -520,6 +520,25 @@ exports.confirmIsCashlessPaidTransaction = async (req, res) => {
   }
 };
 
+exports.getMyTransactions = async (req, res) => {
+  try {
+    // Fetch the transaction, including related detailed transactions and items
+    const transactions = await Transaction.findAll({
+      include: {
+        model: DetailedTransaction,
+        include: [Item], // Assuming DetailedTransaction has an association with Item
+      },
+      where: { userId: req.user.userId },
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.status(200).json(transactions);
+  } catch (error) {
+    console.error("Error fetching transaction:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 exports.getTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
@@ -1250,28 +1269,28 @@ exports.endCashTransaction = async (req, res) => {
   }
 };
 
-// exports.createReportForAllCafes = async () => {
-//   console.log("Starting report generation for all cafes...");
-//   try {
-//     // Fetch all cafes
-//     const cafes = await Cafe.findAll();
+exports.createReportForAllCafes = async () => {
+  console.log("Starting report generation for all cafes...");
+  try {
+    // Fetch all cafes
+    const cafes = await Cafe.findAll();
 
-//     // Create a report for each cafe
-//     for (const cafe of cafes) {
-//       try {
-//         await generateDailyReport(cafe.cafeId);
-//         console.log(`Report generated for cafeId: ${cafe.cafeId}`);
-//       } catch (err) {
-//         console.error(
-//           `Failed to generate report for cafeId: ${cafe.cafeId}`,
-//           err
-//         );
-//       }
-//     }
-//   } catch (error) {
-//     console.error("Error creating reports for all cafes:", error);
-//   }
-// };
+    // Create a report for each cafe
+    for (const cafe of cafes) {
+      try {
+        await generateDailyReport(cafe.cafeId);
+        console.log(`Report generated for cafeId: ${cafe.cafeId}`);
+      } catch (err) {
+        console.error(
+          `Failed to generate report for cafeId: ${cafe.cafeId}`,
+          err
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error creating reports for all cafes:", error);
+  }
+};
 
 const getStartOfDay = () => {
   const now = new Date();

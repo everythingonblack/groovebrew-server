@@ -32,6 +32,7 @@ const upload = multer({
 }).fields([
   { name: "qrBackground", maxCount: 1 },
   { name: "qrPayment", maxCount: 1 },
+  { name: "cafeLogo", maxCount: 1 },
 ]);
 
 // Update cafe details
@@ -75,7 +76,61 @@ exports.updateCafe = async (req, res) => {
     }
   });
 };
+exports.updateCafeWelcomePageConfig = async (req, res) => {
+  upload(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
 
+    const { cafeId } = req.params;
+    const { isWelcomePageActive, welcomingText, backgroundColor, textColor } =
+      req.body;
+    console.log(req.body);
+
+    const imageFile = req.files["cafeLogo"]
+      ? req.files["cafeLogo"][0].path
+      : null;
+
+    try {
+      const cafe = await Cafe.findByPk(cafeId);
+      if (cafe) {
+        // Parse existing configuration
+        let welcomePageConfig = cafe.welcomePageConfig
+          ? JSON.parse(cafe.welcomePageConfig)
+          : {};
+
+        // Update configuration
+        welcomePageConfig.isWelcomePageActive =
+          isWelcomePageActive !== undefined
+            ? isWelcomePageActive
+            : welcomePageConfig.isWelcomePageActive;
+        welcomePageConfig.welcomingText =
+          welcomingText !== undefined
+            ? welcomingText
+            : welcomePageConfig.welcomingText;
+        welcomePageConfig.backgroundColor =
+          backgroundColor !== undefined
+            ? backgroundColor
+            : welcomePageConfig.backgroundColor;
+        welcomePageConfig.textColor =
+          textColor !== undefined ? textColor : welcomePageConfig.textColor;
+        welcomePageConfig.image =
+          imageFile !== null ? imageFile : welcomePageConfig.image;
+
+        // Save updated configuration as a string
+        cafe.welcomePageConfig = JSON.stringify(welcomePageConfig);
+
+        await cafe.save();
+        res.status(200).json(cafe);
+      } else {
+        res.status(404).json({ error: "Cafe not found" });
+      }
+    } catch (error) {
+      console.error("Error updating cafe welcome page config:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+};
 // Create a new cafe
 exports.createCafe = async (req, res) => {
   const { name } = req.body;

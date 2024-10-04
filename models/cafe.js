@@ -1,4 +1,5 @@
 "use strict";
+
 module.exports = (sequelize, DataTypes) => {
   const Cafe = sequelize.define(
     "Cafe",
@@ -47,10 +48,13 @@ module.exports = (sequelize, DataTypes) => {
         },
       },
       needsConfirmation: {
-        // New field for confirmation status
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false, // Default to false (not needing confirmation)
+      },
+      welcomePageConfig: {
+        type: DataTypes.TEXT, // Change this to JSON if you prefer
+        allowNull: true, // Adjust based on your requirements
       },
       createdAt: {
         allowNull: false,

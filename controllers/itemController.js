@@ -99,16 +99,17 @@ exports.updateItem = async (req, res) => {
     if (err) {
       return res.status(400).json({ error: err.message });
     }
-
+    console.log(req.params.itemId);
+    console.log(req.body);
     const { itemId } = req.params;
-    const { stock, name, description } = req.body;
+    const { stock, name, price, description } = req.body;
     const image = req.file ? req.file.path : null;
 
     try {
       const item = await Item.findByPk(itemId);
       if (item) {
-        item.stock = stock;
         item.name = name;
+        item.price = price;
         item.description = description;
         if (image) item.image = image;
 
@@ -214,7 +215,7 @@ exports.setAvailability = async (req, res) => {
     const cafe = await Cafe.findByPk(item.cafeId);
     console.log(item);
     console.log(cafe);
-    if (item.cafeId == req.user.cafeId || req.user.userId == cafe.cafeId) {
+    if (item.cafeId == req.user.cafeId || req.user.userId == cafe.ownerId) {
       item.availability = isAvailable;
       await item.save();
       res.status(201).json(item);

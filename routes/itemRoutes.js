@@ -13,12 +13,7 @@ router.post(
 ); // Create a new item
 router.get("/get-items/:cafeId", itemController.getItems); // Get all items for a specific cafe
 router.get("/get-item/:itemId", itemController.getItemById); // Get a single item by its ID
-router.put(
-  "/set-item/:itemId",
-  auth([1]),
-  checkCafeOwnership,
-  itemController.updateItem
-); // Update an item by its ID
+router.put("/set-item/:itemId", auth([1]), itemController.updateItem); // Update an item by its ID
 router.delete(
   "/rm-item/:itemId",
   auth([1]),

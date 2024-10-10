@@ -70,6 +70,13 @@ exports.getItems = async (req, res) => {
   try {
     const items = await Item.findAll({
       where: { cafeId },
+
+      include: [
+        {
+          model: ItemType,
+          where: { visibility: true },
+        },
+      ],
     });
     res.status(200).json(items);
   } catch (error) {
@@ -206,6 +213,24 @@ exports.updateItemType = async (req, res) => {
   }
 };
 
+exports.setVisibility = async (req, res) => {
+  const { itemTypeId } = req.params;
+  const { isVisible } = req.body;
+
+  try {
+    const itemType = await ItemType.findByPk(itemTypeId);
+    const cafe = await Cafe.findByPk(itemType.cafeId);
+
+    if (itemType.cafeId == req.user.cafeId || req.user.userId == cafe.ownerId) {
+      itemType.visibility = isVisible;
+      await itemType.save();
+      res.status(201).json(itemType);
+    } else return res.status(201).json(item);
+  } catch (error) {
+    console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 exports.setAvailability = async (req, res) => {
   const { itemId } = req.params;
   const { isAvailable } = req.body;

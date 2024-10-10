@@ -121,10 +121,10 @@ exports.getTables = async (req, res) => {
 
 // Controller to get a specific table by tableNo
 exports.getTableByCode = async (req, res) => {
-  const { tableCode } = req.params;
+  const { cafeId, tableCode } = req.params;
 
   try {
-    const table = await Table.findOne({ where: { tableCode } });
+    const table = await Table.findOne({ where: { cafeId, tableCode } });
 
     if (!table) {
       return res.status(404).json({ error: "Table not found" });

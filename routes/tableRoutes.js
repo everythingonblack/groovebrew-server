@@ -12,7 +12,10 @@ router.post(
   checkCafeOwnership,
   tableController.createTable
 );
-router.get("/get-table-by-code/:tableCode", tableController.getTableByCode);
+router.get(
+  "/get-table-by-code/:cafeId/:tableCode",
+  tableController.getTableByCode
+);
 router.get("/get-table/:cafeId", tableController.getTable);
 router.get("/get-tables/:cafeId", auth([1, 2]), tableController.getTables);
 router.put(

@@ -40,14 +40,13 @@ exports.createItem = async (req, res) => {
       return res.status(400).json({ error: err.message });
     }
 
-    const { stock, name, description, price, itemTypeId } = req.body;
+    const { name, description, price, itemTypeId } = req.body;
     const image = req.file ? req.file.path : null;
     console.log(req.body);
     console.log(req.cafe.cafeId);
 
     try {
       const newItem = await Item.create({
-        stock,
         itemTypeId,
         cafeId: req.cafe.cafeId,
         name,
@@ -197,20 +196,41 @@ exports.createItemType = async (req, res) => {
     }
   });
 };
-
 exports.updateItemType = async (req, res) => {
-  const { itemTypeId } = req.params;
-  const { newName } = req.body;
+  upload(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
 
-  try {
-    const type = await ItemType.findByPk(itemTypeId);
-    type.name = newName;
-    await type.save();
-    res.status(201).json(type);
-  } catch (error) {
-    console.error("Error creating cafe:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
+    const { itemTypeId } = req.params;
+    const { name, sampleImage, isVisible } = req.body;
+    const image = req.file ? req.file.path : null;
+
+    try {
+      // Find the existing item type
+      const type = await ItemType.findByPk(itemTypeId);
+      if (!type) {
+        return res.status(404).json({ error: "Item type not found" });
+      }
+
+      // Update the item type details
+      type.name = name;
+      if (image) {
+        console.log("upload");
+        type.image = image; // Update the image if a new one is provided
+      } else if (sampleImage) {
+        console.log("sample");
+        type.image = sampleImage; // Update the image if a new one is provided
+      }
+      type.visibility = isVisible;
+      await type.save(); // Save changes to the database
+      console.log(type.image);
+      res.status(200).json(type); // Return the updated item type
+    } catch (error) {
+      console.error("Error updating item type:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
 };
 
 exports.setVisibility = async (req, res) => {
@@ -268,7 +288,6 @@ exports.deleteItemType = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
 exports.getItemTypesWithItems = async (req, res) => {
   const { cafeId } = req.params;
 
@@ -276,8 +295,25 @@ exports.getItemTypesWithItems = async (req, res) => {
     const cafe = await Cafe.findByPk(cafeId);
     if (!cafe) return res.status(404).json({ error: "Cafe not found" });
 
+    let getAll = false;
+    if (
+      req.user &&
+      (req.user.userId === cafe.ownerId || req.user.cafeId === cafeId)
+    ) {
+      getAll = true;
+    }
+
+    const whereClause = {
+      cafeId,
+    };
+
+    // Only add visibility if not fetching all
+    if (!getAll) {
+      whereClause.visibility = true;
+    }
+
     const itemTypes = await ItemType.findAll({
-      where: { cafeId },
+      where: whereClause,
       include: [
         {
           model: Item,
@@ -286,7 +322,7 @@ exports.getItemTypesWithItems = async (req, res) => {
       ],
     });
 
-    res.status(200).json({ cafe: cafe, data: itemTypes });
+    res.status(200).json({ cafe, data: itemTypes });
   } catch (error) {
     console.error("Error fetching item types with items:", error);
     res.status(500).json({ error: "Failed to retrieve item types with items" });

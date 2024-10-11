@@ -48,7 +48,11 @@ router.delete(
 ); // Delete an item type by its ID
 
 // Combined item and type routes
-router.get("/get-cafe-items/:cafeId", itemController.getItemTypesWithItems); // Get all item types with their associated items for a specific cafe
+router.get(
+  "/get-cafe-items/:cafeId",
+  auth([]),
+  itemController.getItemTypesWithItems
+); // Get all item types with their associated items for a specific cafe
 router.post("/get-cart-details/:cafeId", itemController.getCartDetails); // Get cart details for a specific cafe
 
 module.exports = router;

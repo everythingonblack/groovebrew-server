@@ -160,18 +160,18 @@ exports.getItemType = async (req, res) => {
   }
 };
 
-exports.createItemType = async (req, res) => {
-  const { name } = req.body;
+// exports.createItemType = async (req, res) => {
+//   const { name } = req.body;
 
-  try {
-    const type = await ItemType.create({ name, cafeId: req.cafe.cafeId });
+//   try {
+//     const type = await ItemType.create({ name, cafeId: req.cafe.cafeId });
 
-    res.status(201).json(type);
-  } catch (error) {
-    console.error("Error creating cafe:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+//     res.status(201).json(type);
+//   } catch (error) {
+//     console.error("Error creating cafe:", error);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// };
 
 exports.createItemType = async (req, res) => {
   upload(req, res, async (err) => {
@@ -215,7 +215,7 @@ exports.updateItemType = async (req, res) => {
 
       // Update the item type details
       type.name = name;
-      if (image) {
+      if (req.file) {
         console.log("upload");
         type.image = image; // Update the image if a new one is provided
       } else if (sampleImage) {

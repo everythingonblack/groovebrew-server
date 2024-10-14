@@ -10,11 +10,11 @@ module.exports = (sequelize, DataTypes) => {
       },
       xposition: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
       },
       yposition: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
       },
       cafeId: {
         type: DataTypes.INTEGER,

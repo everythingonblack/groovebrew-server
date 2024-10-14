@@ -7,13 +7,13 @@ const { checkCafeOwnership } = require("../middlewares/checkCafeOwnership");
 // Item routes
 router.post(
   "/create/:cafeId",
-  auth([1]),
+  auth([1, 2]),
   checkCafeOwnership,
   itemController.createItem
 ); // Create a new item
 router.get("/get-items/:cafeId", itemController.getItems); // Get all items for a specific cafe
 router.get("/get-item/:itemId", itemController.getItemById); // Get a single item by its ID
-router.put("/set-item/:itemId", auth([1]), itemController.updateItem); // Update an item by its ID
+router.put("/set-item/:itemId", auth([1, 2]), itemController.updateItem); // Update an item by its ID
 router.delete(
   "/rm-item/:itemId",
   auth([1]),
@@ -30,13 +30,13 @@ router.put(
 router.get("/getItemType/:cafeId", itemController.getItemType); // Get all item types for a specific cafe
 router.post(
   "/createType/:cafeId",
-  auth([1]),
+  auth([1, 2]),
   checkCafeOwnership,
   itemController.createItemType
 ); // Create a new item type for a cafe
 router.put(
   "/updateType/:cafeId/:itemTypeId",
-  auth([1]),
+  auth([1, 2]),
   checkCafeOwnership,
   itemController.updateItemType
 ); // Update an item type by its ID

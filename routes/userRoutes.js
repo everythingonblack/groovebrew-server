@@ -19,16 +19,16 @@ router.post("/get-admin", auth([0]), userController.getAdminList);
 
 // Clerk routes
 router.post(
-  "/create-clerk",
+  "/create-clerk/:cafeId",
   auth([1]),
   checkCafeOwnership,
-  userController.createClerk,
+  userController.createClerk
 );
 router.get(
   "/get-clerk/:cafeId",
   auth([1]),
   checkCafeOwnership,
-  userController.getClerkByCafeId,
+  userController.getClerkByCafeId
 );
 
 module.exports = router;

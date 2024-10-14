@@ -172,15 +172,18 @@ exports.getItemType = async (req, res) => {
 //     res.status(500).json({ error: "Internal server error" });
 //   }
 // };
-
 exports.createItemType = async (req, res) => {
   upload(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: err.message });
     }
 
-    const { name } = req.body;
-    const image = req.file ? req.file.path : null;
+    const { name, sampleImage } = req.body;
+    const image = req.file ? req.file.path : sampleImage || null;
+
+    if (!name) {
+      return res.status(400).json({ error: "Name is required" });
+    }
 
     try {
       const newItemType = await ItemType.create({
@@ -188,7 +191,7 @@ exports.createItemType = async (req, res) => {
         cafeId: req.cafe.cafeId,
         image,
       });
-      console.log(newItemType);
+      console.log("New item type created:", newItemType);
       res.status(201).json(newItemType);
     } catch (error) {
       console.error("Failed to create item type:", error);
@@ -196,6 +199,7 @@ exports.createItemType = async (req, res) => {
     }
   });
 };
+
 exports.updateItemType = async (req, res) => {
   upload(req, res, async (err) => {
     if (err) {

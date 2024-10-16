@@ -10,7 +10,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "aws-serverless-express": "^3.4.0",
     "axios": "^1.7.2",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
@@ -25,6 +24,7 @@
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.3",
     "sequelize-cli": "^6.6.2",
+    "serverless-http": "^3.2.0",
     "socket.io": "^4.7.5",
     "string-similarity": "^4.0.4",
     "web-push": "^3.6.7"

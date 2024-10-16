@@ -1,5 +1,7 @@
 // middlewares/auth.js
-const { User, Session } = require("../models");
+const { User } = require("../models");
+const { verifyToken } = require("../services/jwtHelper"); // Import the JWT helper
+
 
 const auth = (requiredRoles = null) => {
   return async (req, res, next) => {
@@ -14,17 +16,18 @@ const auth = (requiredRoles = null) => {
 
     try {
       let user = null;
-      let session = null;
+      let decoded = null;
       console.log("dwadwadwadwadawdawdawdwa" + token + "aaa");
       if (token != "null") {
         console.log("zzzzz" + token + "aaa");
-        session = await Session.findOne({ where: { token, isValid: true } });
+        
+        decoded = verifyToken(token);
 
-        if (!session) {
+        if (!decoded) {
           throw new Error("Invalid session or session has expired");
         }
 
-        user = await User.findByPk(session.userId);
+        user = await User.findByPk(decoded.userId);
 
         if (!user) {
           return res
@@ -45,7 +48,7 @@ const auth = (requiredRoles = null) => {
       }
 
       req.user = user;
-      req.session = session;
+      req.decoded = decoded;
       next();
     } catch (error) {
       res.status(401).send({ error: "Please authenticate." });

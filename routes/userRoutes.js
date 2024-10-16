@@ -9,7 +9,6 @@ const router = express.Router();
 //checking token is through socket, in index.js
 
 router.post("/login", authController.login);
-router.post("/logout", auth([]), authController.logout);
 router.post("/create-guest", userController.createGuest);
 
 // User routes

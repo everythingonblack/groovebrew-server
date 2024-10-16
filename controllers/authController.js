@@ -1,59 +1,11 @@
 const bcrypt = require("bcrypt");
-const { User, Session } = require("../models");
+const { User } = require("../models");
+const { generateToken, verifyToken } = require("../services/jwtHelper"); // Import the JWT helper
 const userHelper = require("../services/userHelper");
-
-exports.checkTokenSocket = async (socket, token) => {
-  console.log("initoken" + token);
-  try {
-    // Here, you would typically verify the token and perform necessary operations
-    // For example, you might decode the token to extract user information
-    // and update some socket-related data.
-    if (!token) {
-      console.log("gak ketemu");
-      return socket.emit("checkUserTokenRes", {
-        status: 401,
-        message: "No token provided. Please authenticate.",
-      });
-    }
-
-    const session = await Session.findOne({
-      where: { token, isValid: true },
-    });
-    console.log("ketemu");
-    if (!session) {
-      throw new Error("Invalid session or session has expired");
-    }
-
-    const user = await User.findByPk(session.userId);
-
-    if (!user) {
-      return socket.emit("checkUserTokenRes", {
-        status: 404,
-        message: "session not found or invalid",
-      });
-    }
-
-    // Update user socket information
-    userHelper.updateUserSocketId(user, socket.id);
-
-    return socket.emit("checkUserTokenRes", {
-      status: 200,
-      message: "checking token success",
-      data: { user: user, valid: true },
-    });
-  } catch (error) {
-    console.error("Error validating token via socket:", error);
-    return socket.emit("checkUserTokenRes", {
-      status: 404,
-      message: "session checking error",
-    });
-  }
-};
 
 // Controller for user login
 exports.login = async (req, res) => {
   const { username, password } = req.body;
-  console.log(username, password);
   try {
     const user = await User.findOne({ where: { username } });
 
@@ -61,9 +13,10 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const token = generateToken();
-    await Session.create({ userId: user.userId, token });
+    // Generate JWT token
+    const token = generateToken(user);
 
+    // Respond with the token and any necessary user details
     res.json({ token, cafeId: user.cafeId });
   } catch (error) {
     console.error("Error logging in:", error);
@@ -71,25 +24,41 @@ exports.login = async (req, res) => {
   }
 };
 
-// Controller for user logout
-exports.logout = async (req, res) => {
+exports.checkTokenSocket = async (socket, token) => {
   try {
-    await Session.update(
-      { isValid: false },
-      { where: { token: req.session.token } },
-    );
+    if (!token) {
+      return socket.emit("checkUserTokenRes", {
+        status: 401,
+        message: "No token provided. Please authenticate.",
+      });
+    }
 
-    res.sendStatus(200);
+    const userPayload = verifyToken(token);
+
+    if (!userPayload) {
+      return socket.emit("checkUserTokenRes", {
+        status: 401,
+        message: "Invalid or expired token.",
+      });
+    }
+
+    // At this point, userPayload contains the user data decoded from the JWT
+    // You can use this data to update the socket's user information
+    const { userId, username, roleId, cafeId } = userPayload;
+
+    // Update the user socket information if necessary (You could use a userHelper for this as before)
+    userHelper.updateUserSocketId({ userId, username, roleId, cafeId }, socket.id);
+
+    return socket.emit("checkUserTokenRes", {
+      status: 200,
+      message: "Token validated successfully",
+      data: { user: {userId, username, roleId, cafeId} }
+    });
   } catch (error) {
-    console.error("Error logging out:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Error validating token via socket:", error);
+    return socket.emit("checkUserTokenRes", {
+      status: 500,
+      message: "Internal server error",
+    });
   }
 };
-
-// Helper function to generate a token
-function generateToken() {
-  return (
-    Math.random().toString(36).substring(2, 15) +
-    Math.random().toString(36).substring(2, 15)
-  );
-}

@@ -36,7 +36,10 @@ const tableRoutes = require("./routes/tableRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const authController = require("./controllers/authController");
 
-const { User, Cafe, Session } = require("./models");
+const { verifyToken } = require("./services/jwtHelper"); // Import the JWT helper
+
+
+const { User, Cafe } = require("./models");
 
 app.use(express.json());
 
@@ -101,12 +104,10 @@ io.on("connection", async (socket) => {
     const qrCodeData = userHelper.getSocketIdAndShopIdByQRCode(qrCode);
     if (qrCodeData) {
       const socketId = qrCodeData.socketId;
-      const session = await Session.findOne({
-        where: { token, isValid: true },
-      });
+      const decoded = verifyToken(token);
       console.log("socket" + socketId);
-      if (session) {
-        const user = await User.findByPk(session.userId);
+      if (decoded) {
+        const user = await User.findByPk(decoded.userId);
         if (user && user.roleId == 2) {
           const sessionCode = generateRandomString(21);
           io.sockets.sockets.get(socketId).join(user.cafeId);
@@ -118,7 +119,7 @@ io.on("connection", async (socket) => {
 
           // Create guest side session and store it
           const guestSideSession = [
-            session.userId,
+            decoded.userId,
             socket.id,
             socketId,
             sessionCode,
@@ -256,11 +257,9 @@ io.on("connection", async (socket) => {
   socket.on("songRequest", async (data) => {
     const { token, shopId, trackId } = data;
     if (token) {
-      const session = await Session.findOne({
-        where: { token, isValid: true },
-      });
-      if (session) {
-        const user = await User.findByPk(session.userId);
+      const decoded = verifyToken(token);
+      if (decoded) {
+        const user = await User.findByPk(decoded.userId);
         if (user) {
           spotifyService.addToQueue(shopId, user.userId, trackId);
 
@@ -276,9 +275,9 @@ io.on("connection", async (socket) => {
   socket.on("songVote", async (data) => {
     const { token, shopId, trackId, vote } = data;
 
-    const session = await Session.findOne({ where: { token, isValid: true } });
-    if (session) {
-      const user = await User.findByPk(session.userId);
+    const decoded = verifyToken(token);
+    if (decoded) {
+      const user = await User.findByPk(decoded.userId);
       if (user) {
         spotifyService.voteForSong(shopId, user.userId, trackId, vote);
 
@@ -291,9 +290,9 @@ io.on("connection", async (socket) => {
   socket.on("playOrPause", async (data) => {
     const { token, shopId, action } = data;
 
-    const session = await Session.findOne({ where: { token, isValid: true } });
-    if (session) {
-      const user = await User.findByPk(session.userId);
+    const decoded = verifyToken(token);
+    if (decoded) {
+      const user = await User.findByPk(decoded.userId);
       if (user.roleId == 2 && user.cafeId == shopId) {
         const player = await spotifyService.playOrPauseSpotify(shopId, action);
         if (player) {
@@ -316,15 +315,16 @@ app.post("/getConnectedGuestsSides", async (req, res) => {
   if (!token) {
     return res.status(400).json({ error: "Token is required" });
   }
+  
+  const decoded = verifyToken(token);
 
-  const session = await Session.findOne({ where: { token, isValid: true } });
-  const user = await User.findByPk(session.userId);
+  const user = await User.findByPk(decoded.userId);
   if (user.roleId != 2) {
     return res.redirect(process.env.FRONTEND_URI);
   }
 
   // Verify guest side session
-  const sessionDatas = userHelper.getSessionsByClerkId(session.userId);
+  const sessionDatas = userHelper.getSessionsByClerkId(decoded.userId);
   console.log("list" + sessionDatas);
 
   // Check if sessionData is null (session not found or invalid)
@@ -351,14 +351,14 @@ app.post("/removeConnectedGuestsSides", async (req, res) => {
     return res.status(400).json({ error: "Token is required" });
   }
 
-  const session = await Session.findOne({ where: { token, isValid: true } });
-  const user = await User.findByPk(session.userId);
+  const decoded = verifyToken(token);
+  const user = await User.findByPk(decoded.userId);
   if (user.roleId != 2) {
     return res.redirect(process.env.FRONTEND_URI);
   }
 
   const rm = userHelper.deleteGuestSideSessionByGuestSideSessionId(
-    session.userId,
+    decoded.userId,
     req.body.guestSideSessionId
   );
   if (!rm)
@@ -384,8 +384,8 @@ app.get("/login", async (req, res) => {
     return res.redirect(process.env.FRONTEND_URI);
   }
 
-  const session = await Session.findOne({ where: { token, isValid: true } });
-  const user = await User.findByPk(session.userId);
+  const decoded = verifyToken(token);
+  const user = await User.findByPk(decoded.userId);
   if (user.roleId != 2 && user.cafeId != shopId) {
     return res.redirect(process.env.FRONTEND_URI);
   }
@@ -429,8 +429,8 @@ app.get("/logout", async (req, res) => {
     return res.redirect(process.env.FRONTEND_URI);
   }
 
-  const session = await Session.findOne({ where: { token, isValid: true } });
-  const user = await User.findByPk(session.userId);
+  const decoded = verifyToken(token);
+  const user = await User.findByPk(decoded.userId);
   if (user.roleId != 2 && user.cafeId != shopId) {
     return res.redirect(process.env.FRONTEND_URI);
   }

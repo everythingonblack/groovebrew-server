@@ -1,17 +1,15 @@
-const { User, Session } = require("../models");
+const { User } = require("../models");
+
+const { verifyToken } = require("./jwtHelper"); // Import the JWT helper
+
 // services/subscriptionService.js
 let subscriptions = {}; // Map of userId to an array of subscriptions
 
 const addSubscription = async (subscription, token) => {
-  const session = await Session.findOne({
-    where: { token, isValid: true },
-    include: {
-      model: User,
-    },
-  });
+  const decoded = verifyToken(token);
 
-  if (session && session.User) {
-    const userId = session.User.userId; // Extract userId from session
+  if (decoded && decoded.userId) {
+    const userId = decoded.userId; // Extract userId from session
     if (!subscriptions[userId]) {
       subscriptions[userId] = []; // Initialize array if it doesn't exist
     }

@@ -1,6 +1,8 @@
-const { User, Cafe, Session } = require("../models");
+const { User, Cafe } = require("../models");
 const bcrypt = require("bcrypt");
 const checkAvailability = require("../middlewares/checkAvailability");
+
+const { generateToken } = require("../services/jwtHelper"); // Import the JWT helper
 
 // Helper functions
 const generateRandomString = () => Math.random().toString(36).substring(2, 8);
@@ -13,13 +15,6 @@ const generateUniqueUsername = async () => {
     isUsernameAvailable = !existingUser;
   }
   return username;
-};
-
-const generateToken = () => {
-  return (
-    Math.random().toString(36).substring(2, 15) +
-    Math.random().toString(36).substring(2, 15)
-  );
 };
 
 // Controller to create an admin user
@@ -88,8 +83,7 @@ exports.createGuest = async (req, res) => {
       password: hashedPassword,
       roleId: 3,
     });
-    const token = generateToken();
-    await Session.create({ userId: user.userId, token });
+    const token = generateToken(user);
 
     res.status(201).json({ token });
   } catch (error) {

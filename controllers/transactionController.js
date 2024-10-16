@@ -1,7 +1,6 @@
 const {
   User,
   Cafe,
-  Session,
   Transaction,
   DetailedTransaction,
   ItemType,
@@ -18,14 +17,7 @@ const moment = require("moment");
 const { sendEmail } = require("../services/emailServices");
 const { generateUniqueUsername } = require("../helpers/createGuestHelper");
 const userHelper = require("../services/userHelper");
-
-// Helper function to generate a token
-function generateToken() {
-  return (
-    Math.random().toString(36).substring(2, 15) +
-    Math.random().toString(36).substring(2, 15)
-  );
-}
+const { generateToken } = require("../services/jwtHelper"); // Import the JWT helper
 
 // Helper function to validate email format
 function isValidEmail(email) {
@@ -35,7 +27,7 @@ function isValidEmail(email) {
 exports.transactionFromClerk = async (req, res) => {
   console.log("fromclerk");
   const { cafeId } = req.params;
-
+  console.log(req.user)
   if (req.user.cafeId != cafeId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -43,7 +35,7 @@ exports.transactionFromClerk = async (req, res) => {
   const { user_email, payment_type, serving_type, tableNo, transactions } =
     req.body;
 
-  let userEmail = user_email != null ? user_email : "null";
+  let userEmail = user_email || "null";
   if (userEmail != "null" && !isValidEmail(userEmail)) {
     return res.status(400).json({ error: "Invalid email format" });
   }
@@ -60,21 +52,19 @@ exports.transactionFromClerk = async (req, res) => {
 
     tableId = table.tableId;
   }
-
-  const user = await User.findOne({ where: { email: user_email } });
-  let userId;
-  if (!user) {
-    // Create user with a default password
-    const newUsername = await generateUniqueUsername();
-    const newUser = await User.create({
-      email: userEmail,
-      username: newUsername,
-      password: "unsetunsetunset",
-      roleId: 3,
-    });
-    userId = newUser.userId;
-  } else {
-    userId = user.userId;
+  let user = null;
+  if(userEmail != 'null'){
+    user = await User.findOne({ where: { email: user_email } });
+    if (!user) {
+      // Create user with a default password
+      const newUsername = await generateUniqueUsername();
+      user = await User.create({
+        email: userEmail,
+        username: newUsername,
+        password: "unsetunsetunset",
+        roleId: 3,
+      });
+    }
   }
 
   try {
@@ -83,7 +73,7 @@ exports.transactionFromClerk = async (req, res) => {
       const newTransaction = await Transaction.create(
         {
           clerkId: req.user.userId,
-          userId: userId,
+          userId: user?.userId,
           cafeId: cafeId,
           payment_type: paymentType,
           serving_type: servingType,
@@ -108,16 +98,9 @@ exports.transactionFromClerk = async (req, res) => {
 
       await Promise.all(detailedTransactions);
       if (userEmail != "null") {
-        if (!user) {
-          const token = generateToken();
-          await Session.create({ userId: userId, token }, { transaction: t });
-
-          // Send an email to create an account
-          await sendEmail(userEmail, cafe, "invite", transactions.items, token);
-        } else if (user.password === "unsetunsetunset") {
+        if (user.password === "unsetunsetunset") {
           // Send email to complete registration
-          const token = generateToken();
-          await Session.create({ userId: userId, token }, { transaction: t });
+          const token = generateToken(user);
           await sendEmail(
             userEmail,
             cafe,
@@ -145,8 +128,6 @@ exports.transactionFromClerk = async (req, res) => {
 };
 
 exports.transactionFromGuestSide = async (req, res) => {
-  console.log("fromguestside");
-  //userId is guest who transacte
   const token = req.header("Authorization")?.replace("Bearer ", "");
   const { user_email, payment_type, serving_type, tableNo, transactions } =
     req.body;
@@ -176,34 +157,35 @@ exports.transactionFromGuestSide = async (req, res) => {
     tableId = table.tableId;
   }
 
-  let userEmail = user_email != null ? user_email : "null";
+  let userEmail = user_email || "null";
   if (userEmail != "null" && !isValidEmail(userEmail)) {
     return res.status(400).json({ error: "Invalid email format" });
   }
+  let user = null;
 
-  const user = await User.findOne({ where: { email: user_email } });
+  if(userEmail!='null'){
 
-  let userId;
-  if (!user) {
-    // Create user with a default password
-    const newUsername = await generateUniqueUsername();
-    const newUser = await User.create({
-      email: userEmail,
-      username: newUsername,
-      password: "unsetunsetunset",
-      roleId: 3,
-    });
-    userId = newUser.userId;
-  } else {
-    userId = user.userId;
+    user = await User.findOne({ where: { email: user_email } });
+    if (!user) {
+      // Create user with a default password
+      const newUsername = await generateUniqueUsername();
+      user = await User.create({
+        email: userEmail,
+        username: newUsername,
+        password: "unsetunsetunset",
+        roleId: 3,
+      });
+    }
   }
+  
   let newTransaction = null;
   try {
     await sequelize.transaction(async (t) => {
       // Create the main transaction record
       newTransaction = await Transaction.create(
         {
-          userId: userId,
+          clerkId: clerkOf.userId,
+          userId: user?.userId,
           cafeId: cafeId,
           payment_type: paymentType,
           serving_type: servingType,
@@ -229,20 +211,24 @@ exports.transactionFromGuestSide = async (req, res) => {
       await Promise.all(detailedTransactions);
 
       if (userEmail != "null") {
-        if (!user) {
-          const token = generateToken();
-          await Session.create({ userId: userId, token }, { transaction: t });
-          await sendEmail(userEmail, cafe, "invite", transactions.items, token);
-        } else if (user.password === "unsetunsetunset") {
+        if (user.password === "unsetunsetunset") {
           // Send email to complete registration
-          const token = generateToken();
-          await Session.create({ userId: userId, token }, { transaction: t });
+          const token = generateToken(user);
           await sendEmail(
             userEmail,
             cafe,
             "completeRegistration",
             transactions.items,
             token
+          );
+        }
+        else {
+          // Send transaction notification email
+          await sendEmail(
+            userEmail,
+            cafe,
+            "transactionNotification",
+            transactions.items
           );
         }
       }
@@ -260,12 +246,7 @@ exports.transactionFromGuestSide = async (req, res) => {
 };
 
 exports.transactionFromGuestDevice = async (req, res) => {
-  console.log("fromguestdevice");
-  const tokenn = req.header("Authorization")?.replace("Bearer ", "");
-  console.log("ini tokeennnnn");
-  console.log(req.user);
-  //userId is guest who transacte
-  const token = generateToken();
+  let token ="";
   const { cafeId } = req.params;
 
   const cafe = await Cafe.findByPk(cafeId);
@@ -276,7 +257,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
   let paymentType = payment_type == "cash" ? "cash" : "cashless";
   let servingType = serving_type == "pickup" ? "pickup" : "serve";
   let tableId;
-  console.log("bayar" + socketId);
+  
   if (servingType == "serve") {
     const table = await Table.findOne({
       where: { cafeId: cafeId, tableNo: tableNo },
@@ -290,12 +271,11 @@ exports.transactionFromGuestDevice = async (req, res) => {
   if (!req.user) {
     // Create user with a default password
     const newUsername = await generateUniqueUsername();
-    const newUser = await User.create({
+    user = await User.create({
       username: newUsername,
       password: "unsetunsetunset",
       roleId: 3,
     });
-    user = newUser;
 
     //because new user hasnt logged on socket list with its own userId
     userHelper.logUnloggedUserSocket(user.userId, socketId);
@@ -335,13 +315,10 @@ exports.transactionFromGuestDevice = async (req, res) => {
       await Promise.all(detailedTransactions);
 
       if (!req.user) {
-        await Session.create(
-          { userId: user.userId, token },
-          { transaction: t }
-        );
+        token = generateToken(user)
       }
     });
-    socketId;
+
     userHelper.sendMessageToAllClerk(cafeId, "transaction_created", {
       cafeId: newTransaction.cafeId,
       transactionId: newTransaction.transactionId,
@@ -352,16 +329,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
     userHelper.sendMessageToSocket(socketId, event, {
       transactionId: newTransaction.transactionId,
     });
-    // if (!req.user) {
-    //   userHelper.sendMessageToSocket(socketId, "checkUserTokenRes", {
-    //     status: 200,
-    //     message: "checking token success",
-    //     data: {
-    //       user: user,
-    //       valid: true,
-    //     },
-    //   });
-    // }
+    
     res.status(201).json({
       message: "Transactions created successfully",
       newUser: req.user == null,

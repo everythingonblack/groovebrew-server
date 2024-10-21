@@ -326,15 +326,15 @@ exports.transactionFromGuestDevice = async (req, res) => {
     const event = cafe.needsConfirmation
       ? "transaction_pending"
       : "transaction_confirmed";
+      res.status(201).json({
+        message: "Transactions created successfully",
+        newUser: req.user == null,
+        auth: token,
+      });
     userHelper.sendMessageToSocket(socketId, event, {
       transactionId: newTransaction.transactionId,
     });
     
-    res.status(201).json({
-      message: "Transactions created successfully",
-      newUser: req.user == null,
-      auth: token,
-    });
   } catch (error) {
     console.error("Error creating transactions:", error);
     res.status(500).json({ message: "Failed to create transactions" });
@@ -369,6 +369,13 @@ exports.confirmTransaction = async (req, res) => {
       event = "transaction_success"; // Write 'transaction_success' if the confirmed value is 2
     } else if (transaction.confirmed === 3) {
       event = "transaction_end"; // Write 'transaction_end' if the confirmed value is 3
+      const payload = JSON.stringify({
+        title: "Your item is ready",
+        body: transaction.serving_type === "serve" ? "Please wait a moment." : "Come and pick up your item.",
+        transactionId: transaction.transactionId, // Include your transaction ID here
+      });
+      
+      userHelper.sendNotifToUserId(transaction.userId, payload);
     }
 
     await transaction.save();

@@ -180,6 +180,9 @@ function logUnloggedUserSocket(userId, socketId) {
   console.log(userList);
 }
 
+function sendNotifToUserId(userId, payload) {
+  sendNotifications(userId, payload);
+}
 function sendMessageToUser(userId, event, data) {
   // Find the user entry in the userList
   const user = userList.find((entry) => entry[0] === userId);
@@ -258,6 +261,7 @@ module.exports = {
   updateGuestSideSocketId,
   updateUserSocketId,
   logUnloggedUserSocket,
+  sendNotifToUserId,
   sendMessageToUser,
   getAllClerk,
   sendMessageToSocket,

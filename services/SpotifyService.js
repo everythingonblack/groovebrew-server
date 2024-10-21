@@ -12,45 +12,69 @@ class SpotifyService {
     this.clientId = process.env.SPOTIFY_CLIENT_ID;
     this.clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 
-    // Start token refresh interval
-    setInterval(() => {
-      this.getServerAccessToken(true); // Set refresh flag to true
-      console.log("refreshing access token");
-    }, 3600000); // 3600000 milliseconds = 1 hour
+    // // Start token refresh interval
+    // setInterval(() => {
+    //   this.getServerAccessToken(true); // Set refresh flag to true
+    //   console.log("refreshing access token");
+    // }, 3600000); // 3600000 milliseconds = 1 hour
   }
 
-  async getServerAccessToken(refresh = false) {
+  async getServerAccessToken() {
     if (!this.sp_dc) {
       console.log("SP_DC cookie is missing");
-      return;
-    }
-    // Check if token doesn't need to be refreshed unless forced
-    if (!refresh && this.server_access_token !== "") {
-      return this.server_access_token;
+      return null;
     }
 
+    const currentTime = Date.now(); // Current time in milliseconds
+
+    // Check if the access token is available and if it's still valid
+    if (this.server_access_token && this.accessTokenExpirationTimestampMs) {
+      console.log("Checking token validity...");
+
+      // If the current time is less than the expiration timestamp, the token is still valid
+      if (currentTime < this.accessTokenExpirationTimestampMs) {
+        console.log("Token is still valid.");
+        return this.server_access_token;
+      } else {
+        console.log("Token has expired, fetching a new one...");
+      }
+    } else {
+      console.log("No valid token found, fetching a new one...");
+    }
+
+    // Fetch a new access token
     try {
       const response = await fetch(
         "https://open.spotify.com/get_access_token?reason=transport&productType=web_player",
         {
           method: "GET",
           headers: {
-            "User-Agent":
-              "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.0.0 Safari/537.36",
             "App-platform": "WebPlayer",
             "Content-Type": "text/html; charset=utf-8",
             Cookie: `sp_dc=${this.sp_dc}`,
           },
-        },
+        }
       );
+
       const data = await response.json();
+      console.log("Received data:", data);
+
+      // Store the new access token and its expiration timestamp
       this.server_access_token = data.accessToken;
+      this.accessTokenExpirationTimestampMs = data.accessTokenExpirationTimestampMs;
+
+      console.log("New Access Token:", this.server_access_token);
+      console.log("Access Token Expiration Timestamp:", this.accessTokenExpirationTimestampMs);
+
       return this.server_access_token;
     } catch (error) {
       console.error("Error fetching access token:", error);
+      return null;
     }
   }
 
+  
   async getAccessToken(roomId) {
     if (this.rooms[roomId]?.access_token)
       return this.rooms[roomId].access_token;
@@ -176,12 +200,44 @@ class SpotifyService {
       ...this.rooms[roomId],
       access_token: "",
       refresh_token: "",
-      deviceId: "",
+      deviceId: null,
       refreshTimeRemaining: -1,
       paused: false,
     };
   }
 
+async getCanvasUrl(trackId) {
+    const url = `https://api-partner.spotify.com/pathfinder/v1/query?operationName=canvas&variables=%7B%22uri%22%3A%22spotify%3Atrack%3A${trackId}%22%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%221b1e1915481c99f4349af88268c6b49a2b601cf0db7bca8749b5dd75088486fc%22%7D%7D`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + this.server_access_token,
+                
+                'Accept': 'application/json',
+                'Referer': 'https://open.spotify.com/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+                'sec-ch-ua': '"Not_A Brand";v="99", "Google Chrome";v="109", "Chromium";v="109"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Network response was not ok ' + response.statusText);
+        }
+
+        const data = await response.json();
+        const canvasUrl = data.data.trackUnion.canvas.url;
+
+        console.log('Canvas URL:', canvasUrl);
+        return canvasUrl;
+
+    } catch (error) {
+        console.error('There was a problem with the fetch operation:', error);
+    }
+}
   async searchSongs(shopId, query) {
     if (query === "") return null;
     const token = await this.getAccessToken(shopId);
@@ -525,6 +581,7 @@ class SpotifyService {
       } else {
         // If the song is not in the queue, add it with the user's vote
         room.queue.push([trackId, [userId], [], false, false]);
+        console.log("pushing")
       }
       this.rooms[roomId] = room;
     } catch (error) {
@@ -657,10 +714,9 @@ class SpotifyService {
           },
         });
         const { lyrics } = response.data;
-
         lyrics.lines.unshift({
           startTimeMs: "0",
-          words: "",
+          words: "♪",
           syllables: [],
           endTimeMs: "0",
         });
@@ -669,7 +725,7 @@ class SpotifyService {
         this.rooms[roomId].lyric = lyrics;
         return lyrics;
       } catch (error) {
-        console.log(error);
+        // console.log(error);
         this.rooms[roomId].lyric = [];
         return [];
       }

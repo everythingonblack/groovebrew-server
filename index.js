@@ -154,6 +154,7 @@ io.on("connection", async (socket) => {
       const isSpotifyNeedLogin =
         spotifyService.getRoomDeviceId(shopId) == null ? true : false;
       // Emit success message or perform any other actions
+      socket.join(shopId);
       socket.emit("joined-room", { shopId, isSpotifyNeedLogin });
       console.log("emit to " + shopId + isSpotifyNeedLogin);
     } catch {
@@ -242,7 +243,7 @@ io.on("connection", async (socket) => {
   socket.on("leave-room", async (data) => {
     const { shopId } = data;
     socket.leave(shopId);
-    spotifyService.removeUserBySocketId(socket.id); // Remove user from room based on socket ID
+    // spotifyService.removeUserBySocketId(socket.id); // Remove user from room based on socket ID
     console.log("Left room:", shopId);
   });
 
@@ -264,6 +265,8 @@ io.on("connection", async (socket) => {
           spotifyService.addToQueue(shopId, user.userId, trackId);
 
           const queue = await spotifyService.getQueue(shopId);
+          console.log("sharing queue");
+          console.log(queue)
           io.to(shopId).emit("updateQueue", queue);
           console.log(shopId);
           console.log(queue);
@@ -315,7 +318,7 @@ app.post("/getConnectedGuestsSides", async (req, res) => {
   if (!token) {
     return res.status(400).json({ error: "Token is required" });
   }
-  
+
   const decoded = verifyToken(token);
 
   const user = await User.findByPk(decoded.userId);
@@ -372,7 +375,7 @@ app.post("/removeConnectedGuestsSides", async (req, res) => {
       message: "removing Guest side session successfully",
       guestSideList: rm.guestSideList,
     });
-  } catch {}
+  } catch { }
 });
 
 //spotify login endpoint, for clerk
@@ -539,13 +542,34 @@ setInterval(async () => {
     if (playbackState?.is_playing) {
       io.to(shopId).emit("updateCurrentSong", playbackState);
 
-      const lyrics = await spotifyService.fetchRandomTrackLyrics(
-        shopId,
-        playbackState.item.id,
-        true
-      );
-      console.log("force");
-      io.to(shopId).emit("updateLyrics", lyrics.lines);
+      let canvas = spotifyService.rooms[shopId].canvas;
+      let lyrics = spotifyService.rooms[shopId].lyrics;
+
+      if (spotifyService.rooms[shopId].oldTrack != playbackState.item.id) {
+        try {
+          canvas = await spotifyService.getCanvasUrl(playbackState.item.id);
+          spotifyService.rooms[shopId].canvas = canvas;
+
+        } catch (error) {
+          console.error("Error fetching canvas URL:", error);
+          spotifyService.rooms[shopId].canvas = ""
+        }
+        try {
+          lyrics = await spotifyService.fetchRandomTrackLyrics(
+            shopId,
+            playbackState.item.id,
+            true
+          );
+          spotifyService.rooms[shopId].lyrics = lyrics;
+        } catch (error) {
+          spotifyService.rooms[shopId].lyrics = null;
+        }
+
+        spotifyService.rooms[shopId].oldTrack = playbackState.item.id;
+      }
+
+      io.to(shopId).emit("updateCanvas", canvas);
+      io.to(shopId).emit("updateLyrics", lyrics.lines || []);
     }
 
     const queue = await spotifyService.getQueue(shopId);

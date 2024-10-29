@@ -3,8 +3,10 @@ const { isAuthorizedForMaterial } = require("../middlewares/authHelpers");
 
 exports.createMaterialMutation = async (req, res) => {
   const { materialId } = req.params;
-  const { newStock, reason } = req.body;
-  console.log("bbbbbbbbbbb" + newStock);
+  const { newStock, reason, priceAtp } = req.body; // Extract priceAtp from the request body
+  console.log("New Stock: " + newStock);
+  console.log("Price ATP: " + priceAtp); // Optional: Log the priceAtp
+
   try {
     // Authorization check
     const authorized = await isAuthorizedForMaterial(req.user, materialId);
@@ -27,6 +29,7 @@ exports.createMaterialMutation = async (req, res) => {
       newStock,
       changeDate: new Date(),
       reason,
+      priceAtp, // Include priceAtp in the new mutation
     });
 
     res.status(201).json(newMutation);
@@ -35,6 +38,7 @@ exports.createMaterialMutation = async (req, res) => {
     res.status(500).json({ error: "Failed to create material mutation." });
   }
 };
+
 
 // Get all material mutations for a specific cafe
 exports.getMaterialMutations = async (req, res) => {

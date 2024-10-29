@@ -1,13 +1,23 @@
 "use strict";
 
+const { v4: uuidv4 } = require('uuid'); // Use UUID for generating unique identifiers
+
+// Function to generate a 15-character unique ID with dashes every 5 characters
+function generateCafeId() {
+  const uuid = uuidv4().replace(/-/g, ''); // Remove the dashes from UUID
+  return `${uuid.slice(0, 5)}-${uuid.slice(5, 10)}-${uuid.slice(10, 15)}`; // Return formatted string
+}
+
 module.exports = (sequelize, DataTypes) => {
   const Cafe = sequelize.define(
     "Cafe",
     {
       cafeId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.STRING, // Change to STRING
         primaryKey: true,
-        autoIncrement: true,
+        allowNull: false,
+        unique: true,
+        defaultValue: () => generateCafeId(), // Use custom ID generator
       },
       name: {
         type: DataTypes.STRING,
@@ -50,11 +60,11 @@ module.exports = (sequelize, DataTypes) => {
       needsConfirmation: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: false, // Default to false (not needing confirmation)
+        defaultValue: false,
       },
       welcomePageConfig: {
-        type: DataTypes.TEXT, // Change this to JSON if you prefer
-        allowNull: true, // Adjust based on your requirements
+        type: DataTypes.TEXT,
+        allowNull: true,
       },
       createdAt: {
         allowNull: false,

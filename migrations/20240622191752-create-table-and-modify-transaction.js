@@ -18,7 +18,7 @@ module.exports = {
         allowNull: false
       },
       cafeId: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.STRING,
         allowNull: false,
         references: {
           model: 'Cafe',  // Correctly references the cafeId

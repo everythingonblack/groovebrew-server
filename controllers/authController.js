@@ -24,7 +24,7 @@ exports.login = async (req, res) => {
   }
 };
 
-exports.checkTokenSocket = async (socket, token) => {
+exports.checkTokenSocket = async (socket, token, shopIdThatOwnerOpen, ownerId) => {
   try {
     if (!token) {
       return socket.emit("checkUserTokenRes", {
@@ -34,8 +34,8 @@ exports.checkTokenSocket = async (socket, token) => {
     }
 
     const userPayload = verifyToken(token);
-
-    if (!userPayload) {
+    const user = await User.findByPk(userPayload.userId);
+    if (!userPayload || !user) {
       return socket.emit("checkUserTokenRes", {
         status: 401,
         message: "Invalid or expired token.",
@@ -47,12 +47,12 @@ exports.checkTokenSocket = async (socket, token) => {
     const { userId, username, roleId, cafeId } = userPayload;
 
     // Update the user socket information if necessary (You could use a userHelper for this as before)
-    userHelper.updateUserSocketId({ userId, username, roleId, cafeId }, socket.id);
+    userHelper.updateUserSocketId({ userId, username, roleId, cafeId }, socket.id, shopIdThatOwnerOpen);
 
     return socket.emit("checkUserTokenRes", {
       status: 200,
       message: "Token validated successfully",
-      data: { user: {userId, username, roleId, cafeId} }
+      data: { user: {userId, username, roleId, cafeId}, isTheOwner: user.userId == ownerId }
     });
   } catch (error) {
     console.error("Error validating token via socket:", error);

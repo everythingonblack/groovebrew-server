@@ -43,21 +43,20 @@ exports.createAdmin = async (req, res) => {
 // Controller to create a clerk user
 exports.createClerk = async (req, res) => {
   const { cafeId } = req.params;
-  const { username, email, password } = req.body;
+  const { username, password } = req.body;
   try {
     const cafe = await Cafe.findOne({
       where: { cafeId, ownerId: req.user.userId },
     });
     if (!cafe) return res.status(403).json({ error: "Unauthorized" });
 
-    const availability = await checkAvailability(username, email);
+    const availability = await checkAvailability(username);
     if (availability.status === 400)
       return res.status(400).json({ error: availability.message });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({
       username,
-      email,
       password: hashedPassword,
       roleId: 2,
       cafeId,

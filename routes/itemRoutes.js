@@ -50,7 +50,7 @@ router.delete(
 // Combined item and type routes
 router.get(
   "/get-cafe-items/:cafeId",
-  auth([]),
+  auth([-1]),
   itemController.getItemTypesWithItems
 ); // Get all item types with their associated items for a specific cafe
 router.post("/get-cart-details/:cafeId", itemController.getCartDetails); // Get cart details for a specific cafe

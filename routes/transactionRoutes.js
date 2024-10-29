@@ -22,8 +22,8 @@ router.get(
   transactionController.getMyTransactions
 );
 router.get(
-  "/get-transactions/:cafeId",
-  auth([2]),
+  "/get-transactions-from-cafe/:cafeId",
+  auth([]),
   transactionController.getTransactions
 );
 
@@ -32,12 +32,12 @@ router.post("/get-analytics/:cafeId", transactionController.getReport);
 // router.get("/get-favourite/:cafeId", transactionController.getBestSellingItems);
 router.post(
   "/confirm-transaction/:transactionId",
-  auth([2]),
+  auth([1, 2]),
   transactionController.confirmTransaction
 );
 router.post(
   "/decline-transaction/:transactionId",
-  auth([2]),
+  auth([1, 2]),
   transactionController.declineTransaction
 );
 router.post(
@@ -53,7 +53,7 @@ router.post(
 );
 router.post(
   "/confirm-paid/:transactionId",
-  auth([2]),
+  auth([1, 2]),
   transactionController.confirmIsCashlessPaidTransaction
 );
 router.post(

@@ -53,7 +53,7 @@ exports.transactionFromClerk = async (req, res) => {
     tableId = table.tableId;
   }
   let user = null;
-  if(userEmail != 'null'){
+  if (userEmail != 'null') {
     user = await User.findOne({ where: { email: user_email } });
     if (!user) {
       // Create user with a default password
@@ -163,7 +163,7 @@ exports.transactionFromGuestSide = async (req, res) => {
   }
   let user = null;
 
-  if(userEmail!='null'){
+  if (userEmail != 'null') {
 
     user = await User.findOne({ where: { email: user_email } });
     if (!user) {
@@ -177,7 +177,7 @@ exports.transactionFromGuestSide = async (req, res) => {
       });
     }
   }
-  
+
   let newTransaction = null;
   try {
     await sequelize.transaction(async (t) => {
@@ -246,7 +246,7 @@ exports.transactionFromGuestSide = async (req, res) => {
 };
 
 exports.transactionFromGuestDevice = async (req, res) => {
-  let token ="";
+  let token = "";
   const { cafeId } = req.params;
 
   const cafe = await Cafe.findByPk(cafeId);
@@ -257,7 +257,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
   let paymentType = payment_type == "cash" ? "cash" : "cashless";
   let servingType = serving_type == "pickup" ? "pickup" : "serve";
   let tableId;
-  
+
   if (servingType == "serve") {
     const table = await Table.findOne({
       where: { cafeId: cafeId, tableNo: tableNo },
@@ -326,15 +326,15 @@ exports.transactionFromGuestDevice = async (req, res) => {
     const event = cafe.needsConfirmation
       ? "transaction_pending"
       : "transaction_confirmed";
-      res.status(201).json({
-        message: "Transactions created successfully",
-        newUser: req.user == null,
-        auth: token,
-      });
+    res.status(201).json({
+      message: "Transactions created successfully",
+      newUser: req.user == null,
+      auth: token,
+    });
     userHelper.sendMessageToSocket(socketId, event, {
       transactionId: newTransaction.transactionId,
     });
-    
+
   } catch (error) {
     console.error("Error creating transactions:", error);
     res.status(500).json({ message: "Failed to create transactions" });
@@ -345,10 +345,18 @@ exports.confirmTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
   try {
-    const transaction = await Transaction.findByPk(transactionId);
+
+    const transaction = await Transaction.findByPk(transactionId, {
+      include: [
+        {
+          model: Cafe,
+          attributes: ['ownerId'], // Only include the ownerId from the Cafe model
+        },
+      ],
+    });
     if (transaction.confirmed == 3) return;
 
-    if (transaction.cafeId != req.user.cafeId)
+    if (transaction.cafeId != req.user.cafeId && transaction.Cafe.dataValues.ownerId != req.user.userId)
       return res.status(401).json({ error: "Unauthorized" });
 
     if (transaction.confirmed == 1) transaction.is_paid = true;
@@ -374,7 +382,7 @@ exports.confirmTransaction = async (req, res) => {
         body: transaction.serving_type === "serve" ? "Please wait a moment." : "Come and pick up your item.",
         transactionId: transaction.transactionId, // Include your transaction ID here
       });
-      
+
       userHelper.sendNotifToUserId(transaction.userId, payload);
     }
 
@@ -424,15 +432,24 @@ exports.declineTransaction = async (req, res) => {
 
   try {
     const transaction = await Transaction.findByPk(transactionId, {
-      include: {
-        model: DetailedTransaction,
-        include: {
-          model: Item,
+      include: [
+        {
+          model: DetailedTransaction,
+          include: {
+            model: Item,
+          },
         },
-      },
+        {
+          model: Cafe,
+          attributes: ['ownerId'], // Only include the ownerId from the Cafe model
+        },
+      ],
     });
-    if (transaction.cafeId != req.user.cafeId)
+
+
+    if (transaction.cafeId != req.user.cafeId && transaction.Cafe.dataValues.ownerId != req.user.userId)
       return res.status(401).json({ error: "Unauthorized" });
+
     transaction.confirmed = -1;
     await transaction.save();
 
@@ -476,9 +493,17 @@ exports.confirmIsCashlessPaidTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
   try {
-    const transaction = await Transaction.findByPk(transactionId);
+    const transaction = await Transaction.findByPk(transactionId, {
+      include: [
+        {
+          model: Cafe,
+          attributes: ['ownerId'], // Only include the ownerId from the Cafe model
+        },
+      ],
+    });
 
-    if (transaction.cafeId != req.user.cafeId)
+
+    if (transaction.cafeId != req.user.cafeId && transaction.Cafe.dataValues.ownerId != req.user.userId)
       return res.status(401).json({ error: "Unauthorized" });
 
     if (transaction.payment_type == "cashless") transaction.is_paid = true;
@@ -520,20 +545,27 @@ exports.getTransaction = async (req, res) => {
   try {
     // Fetch the transaction, including related detailed transactions and items
     const transaction = await Transaction.findByPk(transactionId, {
-      include: {
-        model: DetailedTransaction,
-        include: [Item], // Assuming DetailedTransaction has an association with Item
-      },
+      include: [
+        {
+          model: DetailedTransaction,
+          include: [Item], // Assuming DetailedTransaction has an association with Item
+        },
+        {
+          model: Cafe,
+          attributes: ['ownerId'], // Only include the ownerId from the Cafe model
+        },
+      ],
     });
+
 
     if (!transaction) {
       return res.status(404).json({ error: "Transaction not found" });
     }
-
+    console.log(transaction)
     // Check if the user is authorized to view this transaction
     if (
       transaction.userId !== req.user.userId &&
-      transaction.cafeId != req.user.cafeId
+      transaction.cafeId != req.user.cafeId && transaction.Cafe.dataValues.ownerId != req.user.userId
     ) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -549,17 +581,12 @@ exports.getTransactions = async (req, res) => {
   const { cafeId } = req.params;
   const { demandLength } = req.query;
 
-  if (req.user.cafeId != cafeId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
   try {
     // Convert demandLength to integer and set limit
     const limit = parseInt(demandLength, 10);
-
-    // Prepare the query options
+    const cafe = await Cafe.findByPk(cafeId);
+    // Prepare the base query options
     const queryOptions = {
-      where: { cafeId: cafeId },
       order: [["createdAt", "DESC"]], // Sort by creation date
       include: [
         {
@@ -571,6 +598,16 @@ exports.getTransactions = async (req, res) => {
         },
       ],
     };
+
+    // Determine the where clause
+    if (req.user.cafeId !== cafeId && req.user.userId != cafe.ownerId) {
+      queryOptions.where = {
+        cafeId: cafeId,
+        userId: req.user.userId // Add userId filter if cafeId does not match
+      };
+    } else {
+      queryOptions.where = { cafeId: cafeId }; // Use cafeId filter
+    }
 
     // Apply the limit if it's not -1
     if (limit !== -1) {
@@ -587,47 +624,6 @@ exports.getTransactions = async (req, res) => {
   }
 };
 
-exports.getTransactions = async (req, res) => {
-  const { cafeId } = req.params;
-  const { demandLength } = req.query;
-
-  if (req.user.cafeId != cafeId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  try {
-    // Convert demandLength to integer and set limit
-    const limit = parseInt(demandLength, 10);
-
-    // Prepare the query options
-    const queryOptions = {
-      where: { cafeId: cafeId },
-      order: [["createdAt", "DESC"]], // Sort by creation date
-      include: [
-        {
-          model: DetailedTransaction,
-          include: [Item], // Include associated Item model
-        },
-        {
-          model: Table,
-        },
-      ],
-    };
-
-    // Apply the limit if it's not -1
-    if (limit !== -1) {
-      queryOptions.limit = limit;
-    }
-
-    // Retrieve transactions
-    const transactions = await Transaction.findAll(queryOptions);
-
-    res.status(200).json(transactions);
-  } catch (error) {
-    console.error("Error fetching transactions:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
 
 exports.calculateIncome = async (req, res) => {
   const { cafeId } = req.params;
@@ -1267,99 +1263,97 @@ exports.createReportForAllCafes = async () => {
   }
 };
 
-const getStartOfDay = () => {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0); // Set to the start of the day
-  return now;
+const getStartOfDayMinus24Hours = () => {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0); // Sets to start of the current day (12:00 AM)
+  date.setDate(date.getDate() - 1); // Moves back by one day
+  return date;
 };
+
 const generateDailyReport = async (cafeId) => {
   const now = new Date();
-  const startOfDay = getStartOfDay();
+  const startOfDay = getStartOfDayMinus24Hours(); // Midnight of the previous day
 
-  try {
-    // Find the favoriteItemId by most frequent itemId
-    const favoriteItem = await DetailedTransaction.findOne({
-      attributes: [
-        "itemId",
-        [sequelize.fn("COUNT", sequelize.col("itemId")), "count"],
-      ],
-      where: {
-        createdAt: {
-          [Op.between]: [startOfDay, now],
-        },
+  // Find all detailed transactions for the specified cafe within the last day
+  const detailedTransactions = await DetailedTransaction.findAll({
+    where: {
+      createdAt: {
+        [Op.between]: [startOfDay, now],
       },
-      group: ["itemId"],
-      order: [[sequelize.fn("COUNT", sequelize.col("itemId")), "DESC"]],
-      limit: 1,
-    });
+      '$Transaction.cafeId$': cafeId, // Join on cafeId
+    },
+    include: [{
+      model: Transaction,
+      attributes: [], // We don't need any attributes from Transaction
+    }, {
+      model: Item, // Assuming you have an Item model to get item price
+      attributes: ['itemId', 'price'], // Include itemId and price
+    }],
+  });
 
-    const favoriteItemId = favoriteItem ? favoriteItem.itemId : null;
-    const totalIncomeResult = await sequelize.query(
-      `
-      SELECT SUM(dt."qty" * i."price") AS totalIncome
-      FROM "DetailedTransaction" dt
-      JOIN "Item" i ON dt."itemId" = i."itemId"
-      WHERE dt."createdAt" BETWEEN :startOfDay AND :now
-        AND i."cafeId" = :cafeId
-      `,
+  const materialMutations = await MaterialMutation.findAll({
+    include: [
       {
-        replacements: { startOfDay, now, cafeId },
-        type: Sequelize.QueryTypes.SELECT,
-      }
-    );
-    const totalIncome = totalIncomeResult[0].totalIncome || 0;
-
-    // Count the transactionCount
-    const transactionCount = await Transaction.count({
-      where: {
-        cafeId,
-        createdAt: {
-          [Op.between]: [startOfDay, now],
-        },
+        model: Material,
+        where: { cafeId },
+        attributes: [],
       },
-    });
+    ],
+    where: {
+      newStock: { [Op.gt]: sequelize.col("oldStock") },
+      createdAt: { 
+        [Op.between]: [startOfDay, now]},
+    },
+  });
 
-    // Find all MaterialMutation between the last 24 hours
-    const materialMutations = await MaterialMutation.findAll({
-      include: [
-        {
-          model: Material,
-          attributes: [], // No need to include Material fields in the result
-          where: { cafeId }, // Filter by cafeId in the Material table
-        },
-      ],
-      where: {
-        changeDate: {
-          [Op.between]: [startOfDay, now],
-        },
-      },
-    });
+  // Organize data for the report
+  const reportData = {};
 
-    // Create a new daily report
-    const newReport = await DailyReport.create({
-      cafeId,
-      reportDate: now,
-      favoriteItemId,
-      totalIncome,
-      transactionCount,
-      materialMutationIds: materialMutations.map((m) => m.mutationId).join(","), // Join materialMutationIds with a comma
-    });
+  detailedTransactions.forEach(detailedTransaction => {
+    const transactionId = detailedTransaction.transactionId;
+    const itemId = detailedTransaction.itemId;
+    const sold = detailedTransaction.qty;
+    const price = detailedTransaction.Item.price; // Get item price
 
-    return newReport;
-  } catch (error) {
-    console.error("Error creating report:", error);
-    throw new Error("Internal server error");
-  }
+    // Initialize the transaction entry if it doesn't exist
+    if (!reportData[transactionId]) {
+      reportData[transactionId] = [];
+    }
+
+    // Find if the item already exists in the array for this transaction
+    const existingItem = reportData[transactionId].find(item => item.itemId === itemId);
+    if (existingItem) {
+      existingItem.sold += sold; // Update sold count
+    } else {
+      reportData[transactionId].push({ itemId, sold, price }); // Add new item with price
+    }
+  });
+
+  // Convert reportData to the desired format
+  const formattedReportData = Object.entries(reportData).map(([transactionId, itemsSold]) => ({
+    transactionId: parseInt(transactionId, 10),
+    itemsSold,
+  }));
+
+  // Prepare materialsPurchased from materialMutations
+  const materialsPurchased = materialMutations.map(mutation => ({
+    mutationId: mutation.dataValues.mutationId,
+    priceAtp: mutation.dataValues.priceAtp,
+  }));
+
+  // Save the report to DailyReport
+  await DailyReport.create({
+    reportDate: startOfDay,
+    cafeId,
+    itemsSold: formattedReportData,
+    materialsPurchased, // Add materialsPurchased here
+  });
+
+  console.log(`Daily report generated for ${startOfDay} for cafe ${cafeId}`);
 };
-exports.getReport = async (req, res) => {
-  const { cafeId } = req.params;
-  const { type } = req.query; // "daily", "weekly", "monthly", "yearly"
-  let filter = type;
-  if (!["daily", "weekly", "monthly", "yearly"].includes(filter)) {
-    return res.status(400).json({ error: "Invalid filter type" });
-  }
+async function getReport(cafeId, filter) {
+  const today = moment(); // Get current date
 
-  const today = moment().startOf("day");
   let currentStartDate, currentEndDate, previousStartDate, previousEndDate;
 
   switch (filter) {
@@ -1392,514 +1386,166 @@ exports.getReport = async (req, res) => {
       break;
 
     default:
-      throw new Error("Invalid filter type");
+      throw new Error("Invalid filter");
   }
 
-  try {
-    let materialMutations = await MaterialMutation.findAll({
-      include: [
-        {
-          model: Material,
-          attributes: ["name", "unit"], // No need to include Material fields in the result
-          where: { cafeId }, // Filter by cafeId in the Material table
-        },
-      ],
-      where: {
-        changeDate: {
-          [Op.between]: [
-            currentStartDate.format("YYYY-MM-DD"),
-            currentEndDate.format("YYYY-MM-DD"),
-          ],
-        },
+  // Fetch current report data
+  const currentReports = await DailyReport.findAll({
+    where: {
+      reportDate: {
+        [Op.between]: [currentStartDate.format("YYYY-MM-DD"), currentEndDate.format("YYYY-MM-DD")],
       },
-    });
+      cafeId
+    },
+  });
 
-    const groupedData = materialMutations.reduce((acc, mutation) => {
-      const materialId = mutation.materialId;
-      if (!acc[materialId]) {
-        acc[materialId] = {
-          name: mutation.Material.name,
-          unit: mutation.Material.unit,
-          mutations: [],
-        };
-      }
-      acc[materialId].mutations.push({
-        mutationId: mutation.mutationId,
-        oldStock: mutation.oldStock,
-        newStock: mutation.newStock,
-        changeDate: mutation.changeDate,
-        reason: mutation.reason,
-        createdAt: mutation.createdAt,
-        updatedAt: mutation.updatedAt,
+  // Fetch previous report data
+  const previousReports = await DailyReport.findAll({
+    where: {
+      reportDate: {
+        [Op.between]: [previousStartDate.format("YYYY-MM-DD"), previousEndDate.format("YYYY-MM-DD")],
+      },
+      cafeId
+    },
+  });
+
+  // Calculate totals and growths
+  const currentTotalIncome = currentReports.reduce((acc, report) => {
+    const transactions = report.itemsSold;
+    transactions.forEach(transaction => {
+      transaction.itemsSold.forEach(item => {
+        acc += item.price * item.sold; // Assuming price is per item
       });
-      return acc;
-    }, {});
+    });
+    return acc;
+  }, 0);
 
-    // Step 2: Format the result as an array of materials with nested mutations
-    materialMutations = Object.values(groupedData);
-    // Fetch data for both the current and previous periods
-    const reports = await DailyReport.findAll({
-      where: {
-        cafeId,
-        reportDate: {
-          [Op.between]: [
-            previousStartDate.format("YYYY-MM-DD"),
-            currentEndDate.format("YYYY-MM-DD"),
-          ],
-        },
+  // Calculate total transactions as the sum of all transactions across reports
+  const currentTotalTransactions = currentReports.reduce((acc, report) => {
+    return acc + report.itemsSold.length; // Count each transaction
+  }, 0);
+
+  const previousTotalIncome = previousReports.reduce((acc, report) => {
+    const transactions = report.itemsSold;
+    transactions.forEach(transaction => {
+      transaction.itemsSold.forEach(item => {
+        acc += item.price * item.sold;
+      });
+    });
+    return acc;
+  }, 0);
+
+  // Calculate previous total transactions
+  const previousTotalTransactions = previousReports.reduce((acc, report) => {
+    return acc + report.itemsSold.length; // Count each transaction
+  }, 0);
+
+  // Calculate growth percentages
+  const growthIncome = previousTotalIncome ? ((currentTotalIncome - previousTotalIncome) / previousTotalIncome) * 100 : 100;
+  const growthTransactions = previousTotalTransactions ? ((currentTotalTransactions - previousTotalTransactions) / previousTotalTransactions) * 100 : 100;
+
+  let currentTotalOutcome = 0;
+  const allMaterialsPurchased = [];
+
+  currentReports.forEach(report => {
+    const materials = report.materialsPurchased || []; // Handle if materialsPurchased is undefined
+    materials.forEach(material => {
+      currentTotalOutcome += material.priceAtp; // Sum priceAtp for current outcome
+      allMaterialsPurchased.push({
+        mutationId: material.mutationId, // Assuming materialId is part of the material object
+        priceAtp: material.priceAtp,
+      });
+    });
+  });
+
+  // Calculate previous total outcome
+  const previousTotalOutcome = previousReports.reduce((acc, report) => {
+    const materials = report.materialsPurchased || [];
+    materials.forEach(material => {
+      acc += material.priceAtp;
+    });
+    return acc;
+  }, 0);
+
+  // Calculate growth outcome percentages
+  const growthOutcome = previousTotalOutcome ? ((currentTotalOutcome - previousTotalOutcome) / previousTotalOutcome) * 100 : 100;
+
+  const items = currentReports.flatMap(report => 
+    report.itemsSold.flatMap(transaction => 
+      transaction.itemsSold.map(item => ({ itemId: item.itemId, sold: item.sold }))
+    )
+  );
+  
+  // Group items by itemId and sum the sold quantities
+  const groupedItems = items.reduce((acc, item) => {
+    const existingItem = acc.find(i => i.itemId === item.itemId);
+    if (existingItem) {
+      existingItem.sold += item.sold; // Sum the sold quantities
+    } else {
+      acc.push({ itemId: item.itemId, sold: item.sold }); // Add new item
+    }
+    return acc;
+  }, []);
+  
+  // Sort the items by sold quantity in descending order
+  groupedItems.sort((a, b) => b.sold - a.sold);
+  
+  // Fetch item names for all grouped items
+  const itemIds = groupedItems.map(item => item.itemId);
+  const itemsWithNames = await Item.findAll({
+    where: {
+      itemId: {
+        [Op.in]: itemIds,
       },
-      attributes: [
-        "reportDate",
-        "favoriteItemId",
-        "otherFavorites",
-        [sequelize.fn("SUM", sequelize.col("totalIncome")), "totalIncome"],
-        [
-          sequelize.fn("SUM", sequelize.col("transactionCount")),
-          "transactionCount",
-        ],
-      ],
-      group: ["reportDate", "favoriteItemId", "otherFavorites", "createdAt"],
-      order: [["createdAt", "ASC"]],
-    });
+    },
+    attributes: ['itemId', 'name'] // Only fetch itemId and name
+  });
+  
+  // Create a map for item names
+  const itemNameMap = {};
+  itemsWithNames.forEach(item => {
+    itemNameMap[item.itemId] = item.name; // Map itemId to name
+  });
+  
+  // Calculate total sold quantity
+  const totalSold = groupedItems.reduce((acc, item) => acc + item.sold, 0);
+  
+  // Add item names and percentage to the grouped items
+  const finalItems = groupedItems.map(item => ({
+    itemId: item.itemId,
+    sold: item.sold,
+    name: itemNameMap[item.itemId] || null, // Add name or null if not found
+    percentage: totalSold ? ((item.sold / totalSold) * 100).toFixed(2) : 0 // Calculate percentage
+  }));
+  
+  // Return the final report with currentOutcome and growthOutcome
+  return {
+    totalIncome: currentTotalIncome,
+    totalTransactions: currentTotalTransactions,
+    growthIncome,
+    growthTransactions,
+    currentOutcome: currentTotalOutcome, // Include currentOutcome
+    growthOutcome, // Include growthOutcome
+    items: finalItems, // Use the grouped items here
+    materialsPurchased:  allMaterialsPurchased
 
-    // Initialize data structures for current and previous periods
-    const currentData = {
-      totalIncome: 0,
-      transactionCount: 0,
-      favoriteItems: {},
-    };
-    const previousData = {
-      totalIncome: 0,
-      transactionCount: 0,
-      favoriteItems: {},
-    };
-
-    reports.forEach((report) => {
-      const reportDate = moment(report.reportDate);
-      const allFavorites = [
-        report.favoriteItemId,
-        ...report.otherFavorites.split(",").map(Number),
-      ];
-
-      if (reportDate.isBetween(currentStartDate, currentEndDate, null, "[]")) {
-        currentData.totalIncome += parseFloat(report.totalIncome);
-        currentData.transactionCount += parseInt(report.transactionCount);
-        allFavorites.forEach((itemId) => {
-          currentData.favoriteItems[itemId] =
-            (currentData.favoriteItems[itemId] || 0) + 1;
-        });
-      } else if (
-        reportDate.isBetween(previousStartDate, previousEndDate, null, "[]")
-      ) {
-        previousData.totalIncome += parseFloat(report.totalIncome);
-        previousData.transactionCount += parseInt(report.transactionCount);
-        allFavorites.forEach((itemId) => {
-          previousData.favoriteItems[itemId] =
-            (previousData.favoriteItems[itemId] || 0) + 1;
-        });
-      }
-    });
-
-    const totalFavoriteItems = Object.values(currentData.favoriteItems).reduce(
-      (acc, count) => acc + count,
-      0
-    );
-
-    const currentFavoriteItems = Object.entries(currentData.favoriteItems)
-      .map(([itemId, count]) => ({ itemId: parseInt(itemId), count }))
-      .sort((a, b) => b.count - a.count);
-
-    // Identify top favorite item for previous period
-    const previousFavoriteItemId = Object.keys(
-      previousData.favoriteItems
-    ).reduce(
-      (a, b) =>
-        previousData.favoriteItems[a] > previousData.favoriteItems[b] ? a : b,
-      null
-    );
-
-    // Fetch item details for the favorite items
-    const [currentFavoriteItemDetails, previousFavoriteItem] =
-      await Promise.all([
-        Item.findAll({
-          where: { itemId: currentFavoriteItems.map((item) => item.itemId) },
-        }),
-        previousFavoriteItemId ? Item.findByPk(previousFavoriteItemId) : null,
-      ]);
-
-    const currentFavoriteItemDetailsMap = currentFavoriteItemDetails.reduce(
-      (map, item) => {
-        map[item.itemId] = item.name;
-        return map;
-      },
-      {}
-    );
-
-    const enrichedCurrentFavoriteItems = currentFavoriteItems.map((item) => ({
-      itemId: item.itemId,
-      name: currentFavoriteItemDetailsMap[item.itemId],
-      count: item.count,
-      percentage:
-        totalFavoriteItems > 0
-          ? ((item.count / totalFavoriteItems) * 100).toFixed(2)
-          : 0,
-    }));
-
-    // Calculate growth
-    const incomeGrowth =
-      previousData.totalIncome > 0
-        ? ((currentData.totalIncome - previousData.totalIncome) /
-            previousData.totalIncome) *
-          100
-        : currentData.totalIncome > 0
-        ? 100
-        : 0;
-
-    const transactionGrowth =
-      previousData.transactionCount > 0
-        ? ((currentData.transactionCount - previousData.transactionCount) /
-            previousData.transactionCount) *
-          100
-        : currentData.transactionCount > 0
-        ? 100
-        : 0;
-
-    return res.json({
-      totalIncome: currentData.totalIncome,
-      transactionCount: currentData.transactionCount,
-      currentFavoriteItems: enrichedCurrentFavoriteItems,
-      previousFavoriteItem: previousFavoriteItem
-        ? { id: previousFavoriteItem.id, name: previousFavoriteItem.name }
-        : null,
-      incomeGrowth,
-      transactionGrowth,
-      materialMutations,
-    });
-  } catch (error) {
-    console.error(error);
-    return res
-      .status(500)
-      .json({ error: "An error occurred while retrieving the report" });
-  }
+  };
 };
-// exports.getReport = async (req, res) => {
-//   const { cafeId } = req.params;
-//   const { type } = req.query; // "daily", "weekly", "monthly", "yearly"
-//   let filter = type;
-//   if (!["daily", "weekly", "monthly", "yearly"].includes(filter)) {
-//     return res.status(400).json({ error: "Invalid filter type" });
-//   }
 
-//   const today = moment().startOf("day");
-//   let currentStartDate, currentEndDate, previousStartDate, previousEndDate;
 
-//   switch (filter) {
-//     case "daily":
-//       currentStartDate = today.clone().subtract(1, "days").startOf("day"); // 1 day back
-//       currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
-//       previousStartDate = today.clone().subtract(2, "days").startOf("day"); // 2 days back
-//       previousEndDate = today.clone().subtract(2, "days").endOf("day"); // 2 days back
-//       break;
+exports.getReport = async (req, res) => {
+  console.log('getting report')
+  const { cafeId } = req.params;
+  const { type } = req.query; // "daily", "weekly", "monthly", "yearly"
+  let filter = type;
+  if (!["daily", "weekly", "monthly", "yearly"].includes(filter)) {
+    return res.status(400).json({ error: "Invalid filter type" });
+  }
 
-//     case "weekly":
-//       currentStartDate = today.clone().subtract(7, "days").startOf("day"); // 7 days back
-//       currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back (end of last 7 days period)
-//       previousStartDate = today.clone().subtract(14, "days").startOf("day"); // 14 days back
-//       previousEndDate = today.clone().subtract(8, "days").endOf("day"); // 8 days back (end of the week before last)
-//       break;
 
-//     case "monthly":
-//       currentStartDate = today.clone().subtract(30, "days").startOf("day"); // 30 days back
-//       currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
-//       previousStartDate = today.clone().subtract(60, "days").startOf("day"); // 60 days back
-//       previousEndDate = today.clone().subtract(31, "days").endOf("day"); // 31 days back (end of the month before last)
-//       break;
-
-//     case "yearly":
-//       currentStartDate = today.clone().subtract(365, "days").startOf("day"); // 365 days back
-//       currentEndDate = today.clone().subtract(1, "days").endOf("day"); // 1 day back
-//       previousStartDate = today.clone().subtract(730, "days").startOf("day"); // 730 days back
-//       previousEndDate = today.clone().subtract(366, "days").endOf("day"); // 366 days back (end of the year before last)
-//       break;
-
-//     default:
-//       throw new Error("Invalid filter type");
-//   }
-
-//   try {
-//     // Fetch data for both the current and previous periods
-//     const reports = await DailyReport.findAll({
-//       where: {
-//         cafeId,
-//         reportDate: {
-//           [Op.between]: [
-//             previousStartDate.format("YYYY-MM-DD"),
-//             currentEndDate.format("YYYY-MM-DD"),
-//           ],
-//         },
-//       },
-//       attributes: [
-//         "reportDate",
-//         "favoriteItemId",
-//         [sequelize.fn("SUM", sequelize.col("totalIncome")), "totalIncome"],
-//         [
-//           sequelize.fn("SUM", sequelize.col("transactionCount")),
-//           "transactionCount",
-//         ],
-//       ],
-//       group: ["reportDate", "favoriteItemId", "createdAt"],
-//       order: [
-//         ["createdAt", "ASC"], // or 'DESC' if you prefer descending order
-//       ],
-//     });
-//     console.log(reports);
-//     // Initialize data structures for current and previous periods
-//     const currentData = {
-//       totalIncome: 0,
-//       transactionCount: 0,
-//       favoriteItems: {},
-//     };
-//     const previousData = {
-//       totalIncome: 0,
-//       transactionCount: 0,
-//       favoriteItems: {},
-//     };
-
-//     reports.forEach((report) => {
-//       const reportDate = moment(report.reportDate);
-//       if (reportDate.isBetween(currentStartDate, currentEndDate, null, "[]")) {
-//         currentData.totalIncome += parseFloat(report.totalIncome);
-//         currentData.transactionCount += parseInt(report.transactionCount);
-//         currentData.favoriteItems[report.favoriteItemId] =
-//           (currentData.favoriteItems[report.favoriteItemId] || 0) + 1;
-//       } else if (
-//         reportDate.isBetween(previousStartDate, previousEndDate, null, "[]")
-//       ) {
-//         previousData.totalIncome += parseFloat(report.totalIncome);
-//         previousData.transactionCount += parseInt(report.transactionCount);
-//         previousData.favoriteItems[report.favoriteItemId] =
-//           (previousData.favoriteItems[report.favoriteItemId] || 0) + 1;
-//       }
-//     });
-
-//     // Compute favorite item for current and previous periods
-//     const currentFavoriteItemId = Object.keys(currentData.favoriteItems).reduce(
-//       (a, b) =>
-//         currentData.favoriteItems[a] > currentData.favoriteItems[b] ? a : b,
-//       null
-//     );
-//     const previousFavoriteItemId = Object.keys(
-//       previousData.favoriteItems
-//     ).reduce(
-//       (a, b) =>
-//         previousData.favoriteItems[a] > previousData.favoriteItems[b] ? a : b,
-//       null
-//     );
-
-//     // Fetch item details for the favorite items
-//     const [currentFavoriteItem, previousFavoriteItem] = await Promise.all([
-//       currentFavoriteItemId ? Item.findByPk(currentFavoriteItemId) : null,
-//       previousFavoriteItemId ? Item.findByPk(previousFavoriteItemId) : null,
-//     ]);
-
-//     // Calculate growth
-//     const incomeGrowth =
-//       previousData.totalIncome > 0
-//         ? ((currentData.totalIncome - previousData.totalIncome) /
-//             previousData.totalIncome) *
-//           100
-//         : currentData.totalIncome > 0
-//         ? 100
-//         : 0;
-
-//     const transactionGrowth =
-//       previousData.transactionCount > 0
-//         ? ((currentData.transactionCount - previousData.transactionCount) /
-//             previousData.transactionCount) *
-//           100
-//         : currentData.transactionCount > 0
-//         ? 100
-//         : 0;
-
-//     return res.json({
-//       totalIncome: currentData.totalIncome,
-//       transactionCount: currentData.transactionCount,
-//       currentFavoriteItem: currentFavoriteItem
-//         ? { id: currentFavoriteItem.id, name: currentFavoriteItem.name }
-//         : null,
-//       previousFavoriteItem: previousFavoriteItem
-//         ? { id: previousFavoriteItem.id, name: previousFavoriteItem.name }
-//         : null,
-//       incomeGrowth,
-//       transactionGrowth,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     return res
-//       .status(500)
-//       .json({ error: "An error occurred while retrieving the report" });
-//   }
-// };
-
-// const getDateRange = (type) => {
-//   const now = new Date();
-//   let startDate, endDate, previousStartDate, previousEndDate;
-
-//   switch (type) {
-//     case "daily":
-//       startDate = new Date(now.setHours(0, 0, 0, 0));
-//       endDate = new Date(startDate).setDate(startDate.getDate() + 1);
-//       previousStartDate = new Date(startDate).setDate(startDate.getDate() - 1);
-//       previousEndDate = new Date(startDate);
-//       break;
-//     case "weekly":
-//       const startOfWeek = now.getDate() - now.getDay(); // Adjust according to your start day of the week
-//       startDate = new Date(now.setDate(startOfWeek));
-//       endDate = new Date(startDate).setDate(startDate.getDate() + 7);
-//       previousStartDate = new Date(startDate).setDate(startDate.getDate() - 7);
-//       previousEndDate = new Date(startDate);
-//       break;
-//     case "monthly":
-//       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-//       endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-//       previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-//       previousEndDate = new Date(now.getFullYear(), now.getMonth(), 1);
-//       break;
-//     case "yearly":
-//       startDate = new Date(now.getFullYear(), 0, 1);
-//       endDate = new Date(now.getFullYear() + 1, 0, 1);
-//       previousStartDate = new Date(now.getFullYear() - 1, 0, 1);
-//       previousEndDate = new Date(now.getFullYear(), 0, 1);
-//       break;
-//     default:
-//       throw new Error("Invalid report type");
-//   }
-
-//   return {
-//     current: { startDate, endDate },
-//     previous: { startDate: previousStartDate, endDate: previousEndDate },
-//   };
-// };
-
-// const generateReportWithGrowth = async (cafeId, type) => {
-//   const { current, previous } = getDateRange(type);
-
-//   try {
-//     // Helper function to get the most favorite item ID for a given date range
-//     const getFavoriteItemId = async (startDate, endDate) => {
-//       const report = await DailyReport.findOne({
-//         attributes: [
-//           [fn("SUM", col("totalIncome")), "totalIncome"],
-//           "favoriteItemId",
-//         ],
-//         where: {
-//           reportDate: {
-//             [Op.between]: [startDate, endDate],
-//           },
-//           ...(cafeId ? { cafeId } : {}),
-//         },
-//         group: ["favoriteItemId"],
-//         order: [[fn("SUM", col("totalIncome")), "DESC"]],
-//         raw: true,
-//       });
-
-//       return report ? report.favoriteItemId : null;
-//     };
-
-//     // Fetch current period total income and favorite item
-//     const currentFavoriteItemId = await getFavoriteItemId(
-//       current.startDate,
-//       current.endDate
-//     );
-//     const currentIncomeResult = await DailyReport.findOne({
-//       attributes: [[fn("SUM", col("totalIncome")), "totalIncome"]],
-//       where: {
-//         reportDate: {
-//           [Op.between]: [current.startDate, current.endDate],
-//         },
-//         ...(cafeId ? { cafeId } : {}),
-//       },
-//       raw: true,
-//     });
-
-//     const currentTotalIncome = currentIncomeResult
-//       ? currentIncomeResult.totalIncome
-//       : 0;
-
-//     // Fetch previous period total income and favorite item
-//     const previousFavoriteItemId = await getFavoriteItemId(
-//       previous.startDate,
-//       previous.endDate
-//     );
-//     const previousIncomeResult = await DailyReport.findOne({
-//       attributes: [[fn("SUM", col("totalIncome")), "totalIncome"]],
-//       where: {
-//         reportDate: {
-//           [Op.between]: [previous.startDate, previous.endDate],
-//         },
-//         ...(cafeId ? { cafeId } : {}),
-//       },
-//       raw: true,
-//     });
-
-//     const previousTotalIncome = previousIncomeResult
-//       ? previousIncomeResult.totalIncome
-//       : 0;
-
-//     // Fetch favorite item details
-//     const currentFavoriteItem = currentFavoriteItemId
-//       ? await Item.findByPk(currentFavoriteItemId)
-//       : null;
-//     const previousFavoriteItem = previousFavoriteItemId
-//       ? await Item.findByPk(previousFavoriteItemId)
-//       : null;
-
-//     // Calculate growth percentage
-//     const growthPercentage =
-//       previousTotalIncome === 0
-//         ? currentTotalIncome > 0
-//           ? 100
-//           : 0
-//         : ((currentTotalIncome - previousTotalIncome) / previousTotalIncome) *
-//           100;
-
-//     return {
-//       currentTotalIncome,
-//       previousTotalIncome,
-//       growthPercentage,
-//       currentFavoriteItem: currentFavoriteItem
-//         ? {
-//             itemId: currentFavoriteItem.itemId,
-//             itemName: currentFavoriteItem.name,
-//             sold: currentTotalIncome,
-//           }
-//         : null,
-//       previousFavoriteItem: previousFavoriteItem
-//         ? {
-//             itemId: previousFavoriteItem.itemId,
-//             itemName: previousFavoriteItem.name,
-//             sold: previousTotalIncome,
-//           }
-//         : null,
-//     };
-//   } catch (error) {
-//     console.error("Error generating report with growth:", error);
-//     throw new Error("Internal server error");
-//   }
-// };
-
-// exports.getReport = async (req, res) => {
-//   const { type } = req.query; // type can be 'daily', 'weekly', 'monthly', 'yearly'
-//   const { cafeId } = req.params; // cafeId is expected as a query parameter
-
-//   if (!["daily", "weekly", "monthly", "yearly"].includes(type)) {
-//     return res.status(400).json({ error: "Invalid report type" });
-//   }
-
-//   try {
-//     const reportData = await generateReportWithGrowth(cafeId || null, type);
-//     res.status(200).json(reportData);
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// };
+  const report = await getReport(
+    cafeId, filter);
+    
+    res.status(200).json(report);
+  console.log(report)
+};

@@ -12,7 +12,7 @@ async function checkAvailability(username, email) {
     }
   }
 
-  if (email !== null) {
+  if (email != undefined && email !== null) {
     const existingEmail = await User.findOne({ where: { email } });
 
     if (existingEmail) {

@@ -14,11 +14,22 @@ app.use(cors());
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.FRONTEND_URI,
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        process.env.FRONTEND_URI,
+        'http://localhost:3000',
+      ];
+      if (allowedOrigins.includes(origin) || !origin) {
+        callback(null, true); // Allow the request
+      } else {
+        callback(new Error('Not allowed by CORS')); // Block the request
+      }
+    },
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
+
 module.exports = { io };
 
 const subscriptionService = require("./services/subscriptionService");
@@ -141,16 +152,23 @@ io.on("connection", async (socket) => {
 
   socket.on("checkUserToken", async ({ token, shopId }) => {
     try {
-      console.log(`trying to check token`);
-      await authController.checkTokenSocket(socket, token);
+      let cafe = null;
+      if(shopId){
+       cafe = await Cafe.findOne({
+        attributes: ['ownerId'], // Specify the ownerId attribute
+        where: { cafeId: shopId } // Use cafeId to find the record
+      });
+    }
+
+      console.log(`trying to check token` + shopId);
+      await authController.checkTokenSocket(socket, token, shopId, cafe?.ownerId); //im adding shopId, is for the owner to be clerk, because owner didnt have cafeId on db
       if (shopId == "") return;
 
-      const cafe = await Cafe.findByPk(shopId);
+      console.log(cafe)
       if (!cafe) {
         socket.emit("joined-failed"); // Inform client about failed join attempt
         return;
       }
-
       const isSpotifyNeedLogin =
         spotifyService.getRoomDeviceId(shopId) == null ? true : false;
       // Emit success message or perform any other actions
@@ -322,7 +340,7 @@ app.post("/getConnectedGuestsSides", async (req, res) => {
   const decoded = verifyToken(token);
 
   const user = await User.findByPk(decoded.userId);
-  if (user.roleId != 2) {
+  if (!user || (user.roleId != undefined && user.roleId != 2)) {
     return res.redirect(process.env.FRONTEND_URI);
   }
 
@@ -621,10 +639,11 @@ const {
 } = require("./controllers/transactionController");
 
 // Schedule a task to run every day at midnight
-cron.schedule("45 7 * * *", async () => {
+cron.schedule("0 17 * * *", async () => {
   console.log("Running daily report generation for all cafes...");
   await createReportForAllCafes();
 });
+
 
 const PORT = process.env.PORT || 5000;
 

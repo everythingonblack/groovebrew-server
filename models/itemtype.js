@@ -16,7 +16,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       cafeId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.STRING,
         allowNull: false,
         references: {
           model: "Cafe",

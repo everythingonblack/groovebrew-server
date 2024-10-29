@@ -25,7 +25,7 @@ module.exports = {
         allowNull: true,
       },
       cafeId: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.STRING,
         allowNull: false,
         references: {
           model: "Cafe",

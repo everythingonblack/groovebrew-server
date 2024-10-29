@@ -20,7 +20,7 @@ module.exports = {
         allowNull: false
       },
       itemId: {
-        type: DataTypes.INTEGER,
+        type: Sequelize.INTEGER,
         references: {
           model: 'Item',
           key: 'itemId'

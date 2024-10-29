@@ -29,7 +29,8 @@ const auth = (requiredRoles = null) => {
 
         user = await User.findByPk(decoded.userId);
 
-        if (!user) {
+        if (!user && requiredRoles !== null && !requiredRoles.includes(-1) ) {
+          console.log(requiredRoles)
           return res
             .status(401)
             .send({ error: "User not found. Please authenticate." });

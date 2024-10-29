@@ -85,10 +85,10 @@ async function updateGuestSideSocketId(sessionCode, newSocketId) {
   return false;
 }
 
-async function updateUserSocketId(user, newSocketId) {
+async function updateUserSocketId(user, newSocketId, shopIdThatOwnerOpen) {
   try {
     const { userId, roleId, cafeId } = user;
-
+    console.log(user);
     // Check if userId already exists in userList
     const index = userList.findIndex((entry) => entry[0] === userId);
 
@@ -98,18 +98,23 @@ async function updateUserSocketId(user, newSocketId) {
         userId,
         roleId,
         newSocketId,
-        roleId === 2 ? cafeId : null,
-      ];
+        (roleId === 1) ? shopIdThatOwnerOpen : 
+        (roleId === 2) ? cafeId : 
+        null,
+    ];
+    
       console.log(`User with userId ${userId} updated in userList.`);
     } else {
       // Add new entry
-      if (roleId == 2) {
+      if (roleId == 1 ) {
+        userList.push([userId, roleId, newSocketId, shopIdThatOwnerOpen]);
+      } else if(roleId ==2) {
         userList.push([userId, roleId, newSocketId, cafeId]);
       } else {
         userList.push([userId, roleId, newSocketId, null]);
       }
       console.log(
-        `User with userId ${userId}  and roleId  ${roleId} added to userList.`
+        `User with userId ${userId}  and roleId  ${roleId} and shopId ${shopIdThatOwnerOpen}added to userList.`
       );
     }
 
@@ -137,6 +142,7 @@ function getAllClerk(cafeId) {
 
 async function sendMessageToAllClerk(cafeId, event, data) {
   // Step 1: Filter userList to get users (clerks) with the specified cafeId
+  console.log(userList);
   console.log("ccccccccccccaaaaaaaaaaaafffffffffffffeeeeeeeeeee" + cafeId);
   const shopClerks = userList.filter((user) => user[3] == cafeId);
 

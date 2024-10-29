@@ -32,7 +32,7 @@ module.exports = {
         onDelete: 'CASCADE'
       },
       cafeId: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.STRING,
         references: {
           model: 'Cafe',
           key: 'cafeId'

@@ -36,6 +36,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      priceAtp: {  // Add the new field here
+        type: DataTypes.INTEGER,
+        allowNull: true, // Adjust according to your requirements
+      },
     },
     {
       tableName: "MaterialMutation",

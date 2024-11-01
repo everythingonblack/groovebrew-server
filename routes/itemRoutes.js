@@ -55,4 +55,7 @@ router.get(
 ); // Get all item types with their associated items for a specific cafe
 router.post("/get-cart-details/:cafeId", itemController.getCartDetails); // Get cart details for a specific cafe
 
+router.put('/moveType/:itemTypeId/:targetItemTypeId/:fromOrder/:toOrder', auth([1, 2]), itemController.moveItemType);
+
+
 module.exports = router;

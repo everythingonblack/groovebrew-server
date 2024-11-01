@@ -644,7 +644,6 @@ cron.schedule("0 17 * * *", async () => {
   await createReportForAllCafes();
 });
 
-
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {

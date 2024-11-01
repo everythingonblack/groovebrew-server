@@ -1,6 +1,7 @@
 const { Cafe } = require("../models");
 const multer = require("multer");
 const path = require("path");
+const { getReportt } = require('./transactionController');
 
 // Multer configuration for file uploads
 const storage = multer.diskStorage({
@@ -214,7 +215,15 @@ exports.getCafeByUserId = async (req, res) => {
     const cafes = await Cafe.findAll({
       where: { ownerId: userId },
     });
-
+    
+    for (const cafe of cafes) {
+      console.log(cafe)
+      const report = await getReportt(cafe.dataValues.cafeId, "monthly");
+      cafe.dataValues.report = report; // Add the report to the cafe object
+    }
+    
+    // Now you can log the cafes with their reports
+    console.log(cafes);
     res.status(200).json(cafes);
   } catch (error) {
     console.error("Error fetching cafes:", error);

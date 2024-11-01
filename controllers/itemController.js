@@ -186,11 +186,16 @@ exports.createItemType = async (req, res) => {
     }
 
     try {
+      // Find the total count of existing item types for the cafeId
+      const totalItemTypes = await ItemType.count({ where: { cafeId: req.cafe.cafeId } });
+
       const newItemType = await ItemType.create({
         name,
         cafeId: req.cafe.cafeId,
         image,
+        order: totalItemTypes // Set the order to the next available index
       });
+      
       console.log("New item type created:", newItemType);
       res.status(201).json(newItemType);
     } catch (error) {
@@ -199,6 +204,7 @@ exports.createItemType = async (req, res) => {
     }
   });
 };
+
 
 exports.updateItemType = async (req, res) => {
   upload(req, res, async (err) => {
@@ -315,7 +321,6 @@ exports.getItemTypesWithItems = async (req, res) => {
     if (!getAll) {
       whereClause.visibility = true;
     }
-
     const itemTypes = await ItemType.findAll({
       where: whereClause,
       include: [
@@ -324,6 +329,7 @@ exports.getItemTypesWithItems = async (req, res) => {
           as: "itemList",
         },
       ],
+      order: [['order', 'ASC']], // Explicitly order by the 'order' column
     });
 
     res.status(200).json({ cafe, data: itemTypes });
@@ -383,5 +389,27 @@ exports.getCartDetails = async (req, res) => {
   } catch (error) {
     console.error("Error fetching cart details:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.moveItemType = async (req, res) => {
+  const { itemTypeId, targetItemTypeId, fromOrder, toOrder } = req.params;
+
+  try {
+    // Update the order for both item types in one go
+    await ItemType.update(
+      { order: toOrder }, // Set the first item's order to the target order
+      { where: { itemTypeId } } // Current item type
+    );
+
+    await ItemType.update(
+      { order: fromOrder }, // Set the target item's order to the current order
+      { where: { itemTypeId: targetItemTypeId } } // Target item type
+    );
+
+    return res.status(200).json({ message: 'Item types swapped successfully' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };

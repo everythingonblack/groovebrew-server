@@ -26,10 +26,14 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "CASCADE",
       },
       visibility: {
-        // Add this line
         type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: true, // Default value can be set as needed
+        defaultValue: true,
+      },
+      order: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0, // Set a default value as needed
       },
       createdAt: {
         allowNull: false,

@@ -1339,6 +1339,7 @@ const generateDailyReport = async (cafeId) => {
   const materialsPurchased = materialMutations.map(mutation => ({
     mutationId: mutation.dataValues.mutationId,
     priceAtp: mutation.dataValues.priceAtp,
+    stockDifference: mutation.dataValues.newStock - mutation.dataValues.oldStock  
   }));
 
   // Save the report to DailyReport
@@ -1351,7 +1352,8 @@ const generateDailyReport = async (cafeId) => {
 
   console.log(`Daily report generated for ${startOfDay} for cafe ${cafeId}`);
 };
-async function getReport(cafeId, filter) {
+
+async function getReportt(cafeId, filter) {
   const today = moment(); // Get current date
 
   let currentStartDate, currentEndDate, previousStartDate, previousEndDate;
@@ -1452,8 +1454,9 @@ async function getReport(cafeId, filter) {
     materials.forEach(material => {
       currentTotalOutcome += material.priceAtp; // Sum priceAtp for current outcome
       allMaterialsPurchased.push({
-        mutationId: material.mutationId, // Assuming materialId is part of the material object
+        mutationId: material.mutationIdg, // Assuming materialId is part of the material object
         priceAtp: material.priceAtp,
+        stockDifference: material.stockDifference
       });
     });
   });
@@ -1543,9 +1546,16 @@ exports.getReport = async (req, res) => {
   }
 
 
-  const report = await getReport(
+  const report = await getReportt(
     cafeId, filter);
     
     res.status(200).json(report);
   console.log(report)
 };
+
+exports.getReportt = async (cafeId, filter) => {
+  const report = await getReportt(
+    cafeId, filter);
+
+    return report;
+}

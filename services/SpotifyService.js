@@ -1,7 +1,4 @@
 const axios = require("axios");
-const dotenv = require("dotenv");
-
-dotenv.config();
 
 class SpotifyService {
   constructor() {
@@ -238,28 +235,89 @@ async getCanvasUrl(trackId) {
         console.error('There was a problem with the fetch operation:', error);
     }
 }
-  async searchSongs(shopId, query) {
-    if (query === "") return null;
-    const token = await this.getAccessToken(shopId);
-    const response = await axios.get("https://api.spotify.com/v1/search", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      params: {
-        q: query,
-        type: "track",
-        limit: 5, // Limit the response to 5 songs
-      },
-    });
 
-    return response.data.tracks.items.map((song) => ({
-      trackId: song.id,
-      name: song.name,
-      artist: song.artists[0].name,
-      album: song.album.name,
-      duration_ms: song.duration_ms,
-      image: song.album.images[0].url,
-    }));
+  async searchSongs(trackName) {
+    let attempts = 0; // To keep track of the number of attempts
+    let tracks = []; // Store found tracks
+  
+    while (attempts < 2) { // Retry a maximum of two times (initial search + one corrected query)
+      try {
+        // Fetch search results from YouTube Music
+        const response = await fetch("https://music.youtube.com/youtubei/v1/search?prettyPrint=false", {
+            method: "POST",
+            headers: {
+                "accept": "*/*",
+                "accept-language": "en-US,en;q=0.9",
+                "content-type": "application/json",
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "same-origin",
+                "sec-fetch-site": "same-origin",
+                "x-goog-visitor-id": "Cgt0QV9udHBPLVVRVSiQpLO5BjIKCgJJRBIEGgAgXA%3D%3D", // Can dynamically generate
+                "x-youtube-client-name": "67",
+                "x-youtube-client-version": "1.20241104.01.00"
+            },
+            body: JSON.stringify({
+                context: {
+                    client: {
+                        hl: "en", // Language
+                        gl: "ID", // Country code
+                        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+                        clientName: "WEB_REMIX",
+                        clientVersion: "1.20241104.01.00",
+                        platform: "DESKTOP",
+                        clientFormFactor: "UNKNOWN_FORM_FACTOR"
+                    },
+                    userInterfaceTheme: "USER_INTERFACE_THEME_DARK",
+                    timeZone: "Asia/Jakarta",
+                    browserName: "Chrome",
+                    browserVersion: "130.0.0.0"
+                },
+                query: trackName, // Search term from user input
+            }),
+            referrer: `https://music.youtube.com/search?q=${encodeURIComponent(trackName)}`,
+            referrerPolicy: "strict-origin-when-cross-origin",
+            credentials: "include",
+            mode: "cors"
+        });
+  
+        const data = await response.json();
+  
+        // Check if music shelf exists and extract tracks
+        if (data.contents.tabbedSearchResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer.contents[1].musicShelfRenderer != undefined) {
+          tracks = data.contents.tabbedSearchResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer.contents[1].musicShelfRenderer.contents.map(item => {
+              return {
+                  name: item.musicResponsiveListItemRenderer.flexColumns[0].musicResponsiveListItemFlexColumnRenderer.text.runs[0].text,
+                  artist: item.musicResponsiveListItemRenderer.flexColumns[1].musicResponsiveListItemFlexColumnRenderer.text.runs[0].text,
+                  length: item.musicResponsiveListItemRenderer.flexColumns[1].musicResponsiveListItemFlexColumnRenderer.text.runs[4].text,
+                  image: item.musicResponsiveListItemRenderer.thumbnail.musicThumbnailRenderer.thumbnail.thumbnails[0].url,
+                  trackId: item.musicResponsiveListItemRenderer.playlistItemData.videoId
+              };
+          });
+          return tracks; // Return tracks if found
+        } else {
+          // Look for a corrected query if no tracks were found
+          let correctedQuery = data.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents?.[0]?.showingResultsForRenderer?.correctedQuery
+              || data.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents?.[0]?.didYouMeanRenderer?.correctedQuery;
+  
+          if (correctedQuery && correctedQuery.runs) {
+            // Combine the runs into a single string (the corrected query)
+            let combinedText = correctedQuery.runs.map(run => run.text).join('');
+            console.log("Trying corrected query:", combinedText);
+            trackName = combinedText; // Update the search term with the corrected one
+          } else {
+            console.log('No corrected query found');
+            return []; // Exit and return empty if no corrected query
+          }
+        }
+  
+        attempts++; // Increment attempts after each iteration
+      } catch (error) {
+        console.error("Error searching for track:", error.message);
+        return []; // Return empty in case of error
+      }
+    }
+  
+    return tracks; // Return the tracks after the loop ends
   }
 
   async getSongDetails(shopId, trackId) {
@@ -570,26 +628,6 @@ async getCanvasUrl(trackId) {
     }
   }
 
-  addToQueue(roomId, userId, trackId) {
-    try {
-      const room = this.rooms[roomId] || { queue: [] }; // Initialize queue as an empty array if it doesn't exist
-      room.queue = room.queue || []; // Ensure room.queue is initialized as an empty array if it doesn't exist
-      const existingIndex = room.queue.findIndex((item) => item[0] === trackId);
-      if (existingIndex !== -1) {
-        // If the song already exists in the queue, just call voteForSong with the agree parameter
-        this.voteForSong(roomId, userId, trackId, true);
-      } else {
-        // If the song is not in the queue, add it with the user's vote
-        room.queue.push([trackId, [userId], [], false, false]);
-        console.log("pushing")
-      }
-      this.rooms[roomId] = room;
-    } catch (error) {
-      // malas baca console.error('Error adding to queue:', error);
-      throw error;
-    }
-  }
-
   removeFromQueue(roomId, trackId) {
     try {
       const room = this.rooms[roomId];
@@ -601,17 +639,39 @@ async getCanvasUrl(trackId) {
       throw error;
     }
   }
+  
+  addToQueue(roomId, userId, track) {
+    try {
+      const room = this.rooms[roomId] || { queue: [] }; // Initialize queue as an empty array if it doesn't exist
+      // room.queue = room.queue || []; // Ensure room.queue is initialized as an empty array if it doesn't exist
+      
+      const existingIndex = room.queue.findIndex((item) => item[0].trackId == track.trackId);
+      if (existingIndex !== -1) {
+        // If the song already exists in the queue, just call voteForSong with the agree parameter
+        this.voteForSong(roomId, userId, track.trackId, true);
+      } else {
+        // If the song is not in the queue, add it with the user's vote
+        room.queue.push([track, [userId], [], false, false]);
+        console.log("pushing")
+      }
+      console.log(existingIndex)
+      this.rooms[roomId] = room;
+    } catch (error) {
+      console.error('Error adding to queue:', error);
+      // throw error;
+    }
+  }
 
-  async getQueue(roomId) {
+
+  getQueue(roomId) {
     try {
       const room = this.rooms[roomId] || { queue: [] };
       if (!room.queue) return [];
 
       const detailedQueue = [];
-      for (let [trackId, agree, disagree, set, bePlayed] of room.queue) {
-        const songDetails = await this.getSongDetails(roomId, trackId);
+      for (let [track, agree, disagree, set, bePlayed] of room.queue) {
         detailedQueue.push({
-          ...songDetails,
+          ...track,
           agree: agree.length,
           disagree: disagree.length,
           set: set,
@@ -621,7 +681,7 @@ async getCanvasUrl(trackId) {
       return detailedQueue;
     } catch (error) {
       // malas baca console.error('Error getting queue:', error);
-      throw error;
+      // throw error;
     }
   }
 
@@ -629,13 +689,16 @@ async getCanvasUrl(trackId) {
     try {
       const room = this.rooms[roomId];
       if (room) {
-        const index = room.queue.findIndex((item) => item[0] === trackId);
+        console.log('room:', room);  // Debugging the room object
+        const index = room.queue.findIndex((item) => item[0].trackId === trackId);
+        console.log('Found index:', index);  // Debugging index value
+  
         if (index !== -1) {
           // Check if userId already exists in the agreement or disagreement positions
           const agreeIndex = room.queue[index][1].indexOf(userId);
           const disagreeIndex = room.queue[index][2].indexOf(userId);
-
-          if (agreeIndex === -1 && disagreeIndex === -1) {
+  
+          // if (agreeIndex === -1 && disagreeIndex === -1) {
             if (agreement) {
               // If user has not already agreed, add userId to agreement position
               room.queue[index][1].push(userId);
@@ -643,16 +706,18 @@ async getCanvasUrl(trackId) {
               // If user has not already disagreed, add userId to disagreement position
               room.queue[index][2].push(userId);
             }
-          }
-
-          console.log(room.queue[index]);
+          // }
         }
+        console.log('agreement:', agreement);
+        console.log('Updated queue item:', room.queue[index]);
+        console.log('trackId:', trackId);
       }
     } catch (error) {
-      // malas baca console.error('Error voting for song:', error);
+      console.error('Error voting for song:', error);
       throw error;
     }
   }
+  
 
   // Get the next song in the queue
   getNextSong(roomId) {

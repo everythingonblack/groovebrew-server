@@ -15,6 +15,7 @@ const sendNotification = (subscription, payload) => {
 
 const sendNotifications = (userId, payload) => {
   const subscriptions = subscriptionService.getSubscriptionsByUserId(userId);
+  console.log('this is subscription'+JSON.stringify(subscriptions))
   if(subscriptions==[]) return;
   subscriptions.forEach((subscription) => {
     try {

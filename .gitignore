@@ -3,4 +3,6 @@
 # dependencies
 /node_modules
 
+/cert.pem
+/privkey.pem
 # rgb(124 165 114)

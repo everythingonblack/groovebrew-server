@@ -522,17 +522,46 @@ exports.confirmIsCashlessPaidTransaction = async (req, res) => {
 
 exports.getMyTransactions = async (req, res) => {
   try {
-    // Fetch the transaction, including related detailed transactions and items
+    // Fetch the transaction, including related detailed transactions, items, and cafes
     const transactions = await Transaction.findAll({
-      include: {
-        model: DetailedTransaction,
-        include: [Item], // Assuming DetailedTransaction has an association with Item
-      },
+      include: [
+        {
+          model: DetailedTransaction,
+          include: [Item], // Assuming DetailedTransaction has an association with Item
+        },
+        {
+          model: Cafe, // Assuming Transaction has an association with Cafe
+        },
+      ],
       where: { userId: req.user.userId },
       order: [["createdAt", "DESC"]],
     });
-
-    res.status(200).json(transactions);
+    
+    // Group transactions by cafeId
+    const groupedTransactions = transactions.reduce((result, transaction) => {
+      const cafeId = transaction.Cafe.cafeId; // Assuming `Cafe` is an associated model
+      if (!result[cafeId]) {
+        result[cafeId] = {
+          cafeId: cafeId,
+          name: transaction.Cafe.name,
+          transactions: [],
+        };
+      }
+    
+      result[cafeId].transactions.push({
+        transactionId: transaction.transactionId,
+        detailedTransactions: transaction.DetailedTransactions, // Assuming DetailedTransactions is the association name
+      });
+    
+      return result;
+    }, {});
+    
+    // Now convert the grouped transactions object to an array (or leave it as an object if you prefer)
+    const groupedArray = Object.values(groupedTransactions);
+    
+    // Send the grouped response
+    res.status(200).json(groupedArray);
+    
   } catch (error) {
     console.error("Error fetching transaction:", error);
     res.status(500).json({ error: "Internal server error" });

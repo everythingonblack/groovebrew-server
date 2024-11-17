@@ -1,4 +1,4 @@
-const { User } = require("../models");
+const { User, Cafe } = require("../models");
 const { io } = require("../index");
 const { sendNotifications } = require("./notificationServices");
 
@@ -163,6 +163,13 @@ async function sendMessageToAllClerk(cafeId, event, data) {
     cafeId: data.cafeId,
     transactionId: data.transactionId, // Include your transaction ID here
   });
+
+  const ownerId = await Cafe.findOne({
+    where: { cafeId: cafeId },
+    attributes: ['ownerId'] // Only fetch itemId and name
+  });
+  console.log(ownerId.dataValues.ownerId )
+  if(ownerId.dataValues.ownerId != null) sendNotifications(ownerId.dataValues.ownerId, payload);
 
   const users = await User.findAll({
     where: { cafeId: cafeId },

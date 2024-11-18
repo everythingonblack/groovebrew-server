@@ -5,4 +5,7 @@
 
 /cert.pem
 /privkey.pem
-# rgb(124 165 114)
+/.env.development
+/.env.production
+# rgb(124 165 114).en.devvelopment
+.env.production

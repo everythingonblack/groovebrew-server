@@ -28,7 +28,8 @@ router.get(
 );
 
 // router.get("/get-income/:cafeId", transactionController.calculateIncome);
-router.post("/get-analytics/:cafeId", transactionController.getReport);
+router.post("/get-reports/:cafeId", transactionController.getReport);
+router.post("/get-analytics", auth([0]), transactionController.getAllTenantReport);
 // router.get("/get-favourite/:cafeId", transactionController.getBestSellingItems);
 router.post(
   "/confirm-transaction/:transactionId",

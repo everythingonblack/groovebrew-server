@@ -1588,3 +1588,80 @@ exports.getReportt = async (cafeId, filter) => {
 
     return report;
 }
+exports.getAllTenantReport = async (req, res) => {
+  try {
+    const { type } = req.query; // "daily", "weekly", "monthly", "yearly"
+    
+    // Step 1: Fetch all tenants (users with roleId = 1)
+    const tenants = await User.findAll({
+      where: { roleId: 1 }, // Tenants have roleId = 1
+      attributes: ['userId', 'username'] // Fetch userId and username
+    });
+
+    // Step 2: If no tenants are found, return an empty array
+    if (tenants.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // Step 3: Initialize an empty array to store the final result
+    const tenantCafeReports = [];
+
+    // Step 4: Initialize variable to accumulate total income from all tenants
+    let totalIncomeFromAllTenant = 0;
+
+    // Step 5: Loop through each tenant to fetch their cafes and calculate totalIncome
+    for (let tenant of tenants) {
+      // Fetch cafes for the current tenant
+      const cafes = await Cafe.findAll({
+        where: {
+          ownerId: tenant.userId // Get cafes for the specific tenant by userId
+        },
+        attributes: ['cafeId', 'name', 'image', 'qrPayment', 'qrBackground', 'xposition', 'yposition', 'scale', 'ownerId', 'needsConfirmation', 'welcomePageConfig', 'createdAt', 'updatedAt'] // Cafe details
+      });
+
+      // If the tenant owns no cafes, skip to the next tenant
+      if (cafes.length === 0) {
+        continue;
+      }
+
+      // Step 6: Fetch reports for each cafe owned by this tenant in parallel
+      const reports = await Promise.all(
+        cafes.map(cafe => getReportt(cafe.cafeId, 'monthly')) // Fetch report for each cafe
+      );
+
+      // Step 7: Calculate the total income for the current tenant
+      const totalIncomeForTenant = reports.reduce((sum, report) => {
+        return sum + (report?.totalIncome || 0); // Add the totalIncome for each cafe's report
+      }, 0);
+
+      // Add this tenant's total income to the overall total income
+      totalIncomeFromAllTenant += totalIncomeForTenant;
+
+      // Step 8: Add the tenant with their cafes and corresponding reports to the result
+      const tenantWithCafesAndReports = {
+        userId: tenant.userId,
+        username: tenant.username,
+        totalIncome: totalIncomeForTenant, // Add the total income for this tenant
+        cafes: cafes.map((cafe, index) => ({
+          ...cafe.dataValues, // Include all cafe details
+          report: reports[index] // Attach the corresponding report
+        }))
+      };
+
+      // Add the tenant's data to the final result
+      tenantCafeReports.push(tenantWithCafesAndReports);
+    }
+
+    // Step 9: Return the final result with tenants, cafes, reports, total income from all tenants
+    res.status(200).json({
+      totalIncomeFromAllTenant, // Add the total income from all tenants
+      tenants: tenantCafeReports // Add tenants data with their cafes and reports
+    });
+
+  } catch (error) {
+    console.error("Error fetching tenant reports:", error);
+    res.status(500).json({ error: "Could not fetch tenant reports" });
+  }
+};
+
+

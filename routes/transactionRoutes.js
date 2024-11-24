@@ -29,7 +29,7 @@ router.get(
 
 // router.get("/get-income/:cafeId", transactionController.calculateIncome);
 router.post("/get-reports/:cafeId", transactionController.getReport);
-router.post("/get-analytics", auth([0]), transactionController.getAllTenantReport);
+router.post("/get-analytics", auth([0, 1]), transactionController.getAnalytics);
 // router.get("/get-favourite/:cafeId", transactionController.getBestSellingItems);
 router.post(
   "/confirm-transaction/:transactionId",

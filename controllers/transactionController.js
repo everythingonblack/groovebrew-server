@@ -536,7 +536,7 @@ exports.getMyTransactions = async (req, res) => {
       where: { userId: req.user.userId },
       order: [["createdAt", "DESC"]],
     });
-    
+
     // Group transactions by cafeId
     const groupedTransactions = transactions.reduce((result, transaction) => {
       const cafeId = transaction.Cafe.cafeId; // Assuming `Cafe` is an associated model
@@ -547,21 +547,21 @@ exports.getMyTransactions = async (req, res) => {
           transactions: [],
         };
       }
-    
+
       result[cafeId].transactions.push({
         transactionId: transaction.transactionId,
         detailedTransactions: transaction.DetailedTransactions, // Assuming DetailedTransactions is the association name
       });
-    
+
       return result;
     }, {});
-    
+
     // Now convert the grouped transactions object to an array (or leave it as an object if you prefer)
     const groupedArray = Object.values(groupedTransactions);
-    
+
     // Send the grouped response
     res.status(200).json(groupedArray);
-    
+
   } catch (error) {
     console.error("Error fetching transaction:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -1330,8 +1330,9 @@ const generateDailyReport = async (cafeId) => {
     ],
     where: {
       newStock: { [Op.gt]: sequelize.col("oldStock") },
-      createdAt: { 
-        [Op.between]: [startOfDay, now]},
+      createdAt: {
+        [Op.between]: [startOfDay, now]
+      },
     },
   });
 
@@ -1368,7 +1369,7 @@ const generateDailyReport = async (cafeId) => {
   const materialsPurchased = materialMutations.map(mutation => ({
     mutationId: mutation.dataValues.mutationId,
     priceAtp: mutation.dataValues.priceAtp,
-    stockDifference: mutation.dataValues.newStock - mutation.dataValues.oldStock  
+    stockDifference: mutation.dataValues.newStock - mutation.dataValues.oldStock
   }));
 
   // Save the report to DailyReport
@@ -1382,10 +1383,13 @@ const generateDailyReport = async (cafeId) => {
   console.log(`Daily report generated for ${startOfDay} for cafe ${cafeId}`);
 };
 
-async function getReportt(cafeId, filter) {
+async function getReportt(cafeId, filter, getAll = true) {
   const today = moment(); // Get current date
 
   let currentStartDate, currentEndDate, previousStartDate, previousEndDate;
+  let currentTotalTransactions, growthIncome, growthTransactions, growthOutcome, finalItems = null;
+  let currentTotalOutcome = 0;
+  let allMaterialsPurchased = [];
 
   switch (filter) {
     case "daily":
@@ -1451,105 +1455,147 @@ async function getReportt(cafeId, filter) {
     return acc;
   }, 0);
 
-  // Calculate total transactions as the sum of all transactions across reports
-  const currentTotalTransactions = currentReports.reduce((acc, report) => {
-    return acc + report.itemsSold.length; // Count each transaction
-  }, 0);
+  if (getAll == true) {
+    // Calculate total transactions as the sum of all transactions across reports
+    currentTotalTransactions = currentReports.reduce((acc, report) => {
+      return acc + report.itemsSold.length; // Count each transaction
+    }, 0);
 
-  const previousTotalIncome = previousReports.reduce((acc, report) => {
-    const transactions = report.itemsSold;
-    transactions.forEach(transaction => {
-      transaction.itemsSold.forEach(item => {
-        acc += item.price * item.sold;
+    const previousTotalIncome = previousReports.reduce((acc, report) => {
+      const transactions = report.itemsSold;
+      transactions.forEach(transaction => {
+        transaction.itemsSold.forEach(item => {
+          acc += item.price * item.sold;
+        });
       });
-    });
-    return acc;
-  }, 0);
+      return acc;
+    }, 0);
 
-  // Calculate previous total transactions
-  const previousTotalTransactions = previousReports.reduce((acc, report) => {
-    return acc + report.itemsSold.length; // Count each transaction
-  }, 0);
+    // Calculate previous total transactions
+    const previousTotalTransactions = previousReports.reduce((acc, report) => {
+      return acc + report.itemsSold.length; // Count each transaction
+    }, 0);
 
-  // Calculate growth percentages
-  const growthIncome = previousTotalIncome ? ((currentTotalIncome - previousTotalIncome) / previousTotalIncome) * 100 : 100;
-  const growthTransactions = previousTotalTransactions ? ((currentTotalTransactions - previousTotalTransactions) / previousTotalTransactions) * 100 : 100;
+    // Calculate growth percentages
+    growthIncome = previousTotalIncome ? ((currentTotalIncome - previousTotalIncome) / previousTotalIncome) * 100 : 100;
+    growthTransactions = previousTotalTransactions ? ((currentTotalTransactions - previousTotalTransactions) / previousTotalTransactions) * 100 : 100;
 
-  let currentTotalOutcome = 0;
-  const allMaterialsPurchased = [];
+    const mutationIds = currentReports.flatMap(report =>
+      (report.materialsPurchased || []).map(material => material.mutationId)
+    );
 
-  currentReports.forEach(report => {
-    const materials = report.materialsPurchased || []; // Handle if materialsPurchased is undefined
-    materials.forEach(material => {
-      currentTotalOutcome += material.priceAtp; // Sum priceAtp for current outcome
-      allMaterialsPurchased.push({
-        mutationId: material.mutationIdg, // Assuming materialId is part of the material object
-        priceAtp: material.priceAtp,
-        stockDifference: material.stockDifference
-      });
-    });
-  });
-
-  // Calculate previous total outcome
-  const previousTotalOutcome = previousReports.reduce((acc, report) => {
-    const materials = report.materialsPurchased || [];
-    materials.forEach(material => {
-      acc += material.priceAtp;
-    });
-    return acc;
-  }, 0);
-
-  // Calculate growth outcome percentages
-  const growthOutcome = previousTotalOutcome ? ((currentTotalOutcome - previousTotalOutcome) / previousTotalOutcome) * 100 : 100;
-
-  const items = currentReports.flatMap(report => 
-    report.itemsSold.flatMap(transaction => 
-      transaction.itemsSold.map(item => ({ itemId: item.itemId, sold: item.sold }))
-    )
-  );
-  
-  // Group items by itemId and sum the sold quantities
-  const groupedItems = items.reduce((acc, item) => {
-    const existingItem = acc.find(i => i.itemId === item.itemId);
-    if (existingItem) {
-      existingItem.sold += item.sold; // Sum the sold quantities
-    } else {
-      acc.push({ itemId: item.itemId, sold: item.sold }); // Add new item
-    }
-    return acc;
-  }, []);
-  
-  // Sort the items by sold quantity in descending order
-  groupedItems.sort((a, b) => b.sold - a.sold);
-  
-  // Fetch item names for all grouped items
-  const itemIds = groupedItems.map(item => item.itemId);
-  const itemsWithNames = await Item.findAll({
-    where: {
-      itemId: {
-        [Op.in]: itemIds,
+    // Step 2: Fetch material mutations based on mutationId and include Material for name
+    const currentMaterialMutations = await MaterialMutation.findAll({
+      where: {
+        mutationId: {
+          [Op.in]: mutationIds, // Use Op.in to match mutationIds
+        },
       },
-    },
-    attributes: ['itemId', 'name'] // Only fetch itemId and name
-  });
-  
-  // Create a map for item names
-  const itemNameMap = {};
-  itemsWithNames.forEach(item => {
-    itemNameMap[item.itemId] = item.name; // Map itemId to name
-  });
-  
-  // Calculate total sold quantity
-  const totalSold = groupedItems.reduce((acc, item) => acc + item.sold, 0);
-  
-  // Add item names and percentage to the grouped items
-  const finalItems = groupedItems.map(item => ({
-    itemId: item.itemId,
-    sold: item.sold,
-    name: itemNameMap[item.itemId] || null, // Add name or null if not found
-    percentage: totalSold ? ((item.sold / totalSold) * 100).toFixed(2) : 0 // Calculate percentage
-  }));
-  
+      include: [
+        {
+          model: Material,
+          required: true, // Enforces an INNER JOIN
+          attributes: ['name'], // Fetch only the 'name' of the material
+        },
+      ],
+      attributes: ['mutationId', 'materialId', 'createdAt'], // Fetch mutationId, materialId, and createdAt from MaterialMutation
+    });
+
+    console.log(currentMaterialMutations);
+
+    // Step 3: Create a map from mutationId to material name and createdAt (date)
+    const materialNameMap = currentMaterialMutations.reduce((acc, materialMutation) => {
+      // Ensure that the object for the mutationId exists before setting values
+      if (!acc[materialMutation.mutationId]) {
+        acc[materialMutation.mutationId] = {};
+      }
+
+      // Assign the name and date (createdAt) to the respective mutationId
+      acc[materialMutation.mutationId].materialId = materialMutation.materialId;
+      acc[materialMutation.mutationId].name = materialMutation.Material.name;
+      acc[materialMutation.mutationId].date = materialMutation.createdAt;
+
+      return acc;
+    }, {});
+
+    console.log(materialNameMap);
+
+    // Step 4: Loop through reports and add name and date from the map to allMaterialsPurchased
+    currentReports.forEach(report => {
+      const materials = report.materialsPurchased || []; // Handle if materialsPurchased is undefined
+      materials.forEach(material => {
+        currentTotalOutcome += material.stockDifference * material.priceAtp; // Sum priceAtp for current outcome
+        allMaterialsPurchased.push({
+          mutationId: material.mutationId, // Add mutationId
+          materialId: materialNameMap[material.mutationId]?.materialId,
+          date: materialNameMap[material.mutationId]?.date || 'Unknown', // Add date from the map (or 'Unknown' if not found)
+          name: materialNameMap[material.mutationId]?.name || 'Unknown', // Add material name (or 'Unknown' if not found)
+          priceAtp: material.priceAtp,
+          stockDifference: material.stockDifference
+        });
+      });
+    });
+
+    // Calculate previous total outcome
+    const previousTotalOutcome = previousReports.reduce((acc, report) => {
+      const materials = report.materialsPurchased || [];
+      materials.forEach(material => {
+        acc += material.priceAtp;
+      });
+      return acc;
+    }, 0);
+
+    // Calculate growth outcome percentages
+    growthOutcome = previousTotalOutcome ? ((currentTotalOutcome - previousTotalOutcome) / previousTotalOutcome) * 100 : 100;
+
+    const items = currentReports.flatMap(report =>
+      report.itemsSold.flatMap(transaction =>
+        transaction.itemsSold.map(item => ({ itemId: item.itemId, sold: item.sold }))
+      )
+    );
+
+    // Group items by itemId and sum the sold quantities
+    const groupedItems = items.reduce((acc, item) => {
+      const existingItem = acc.find(i => i.itemId === item.itemId);
+      if (existingItem) {
+        existingItem.sold += item.sold; // Sum the sold quantities
+      } else {
+        acc.push({ itemId: item.itemId, sold: item.sold }); // Add new item
+      }
+      return acc;
+    }, []);
+
+    // Sort the items by sold quantity in descending order
+    groupedItems.sort((a, b) => b.sold - a.sold);
+
+    // Fetch item names for all grouped items
+    const itemIds = groupedItems.map(item => item.itemId);
+    const itemsWithNames = await Item.findAll({
+      where: {
+        itemId: {
+          [Op.in]: itemIds,
+        },
+      },
+      attributes: ['itemId', 'name'] // Only fetch itemId and name
+    });
+
+    // Create a map for item names
+    const itemNameMap = {};
+    itemsWithNames.forEach(item => {
+      itemNameMap[item.itemId] = item.name; // Map itemId to name
+    });
+
+    // Calculate total sold quantity
+    const totalSold = groupedItems.reduce((acc, item) => acc + item.sold, 0);
+
+    // Add item names and percentage to the grouped items
+    finalItems = groupedItems.map(item => ({
+      itemId: item.itemId,
+      sold: item.sold,
+      name: itemNameMap[item.itemId] || null, // Add name or null if not found
+      percentage: totalSold ? ((item.sold / totalSold) * 100).toFixed(2) : 0 // Calculate percentage
+    }));
+  }
   // Return the final report with currentOutcome and growthOutcome
   return {
     totalIncome: currentTotalIncome,
@@ -1559,7 +1605,7 @@ async function getReportt(cafeId, filter) {
     currentOutcome: currentTotalOutcome, // Include currentOutcome
     growthOutcome, // Include growthOutcome
     items: finalItems, // Use the grouped items here
-    materialsPurchased:  allMaterialsPurchased
+    materialsPurchased: allMaterialsPurchased
 
   };
 };
@@ -1577,8 +1623,8 @@ exports.getReport = async (req, res) => {
 
   const report = await getReportt(
     cafeId, filter);
-    
-    res.status(200).json(report);
+
+  res.status(200).json(report);
   console.log(report)
 };
 
@@ -1586,16 +1632,64 @@ exports.getReportt = async (cafeId, filter) => {
   const report = await getReportt(
     cafeId, filter);
 
-    return report;
+  return report;
 }
-exports.getAllTenantReport = async (req, res) => {
+
+exports.getAnalytics = async (req, res) => {
+  try {
+    // Step 1: Handle tenant-level analytics (roleId == 0)
+    if (req.user.roleId === 0) {
+      await getAllTenantReports(req, res);
+    } else if (req.user.roleId === 1) {
+      // Step 2: Fetch cafes belonging to the owner (roleId == 1)
+      const cafes = await Cafe.findAll({
+        where: { ownerId: req.user.userId },
+      });
+
+      let totalIncome = 0; // Initialize total income counter
+      let totalOutcome = 0; // Initialize total income counter
+
+      // Step 3: Process each cafe
+      for (const cafe of cafes) {
+        // Fetching the report for each cafe
+        const report = await getReportt(cafe.dataValues.cafeId, "monthly", true);
+        cafe.dataValues.report = report; // Add the report to the cafe object
+
+        // Calculate the total income and add it to the running total
+        totalIncome += report.totalIncome;
+        totalOutcome += report.currentOutcome;
+
+        // Fetching the clerks for each cafe
+        const clerks = await User.findAll({
+          where: { cafeId: cafe.dataValues.cafeId },
+        });
+        cafe.dataValues.subItems = clerks; // Add the clerks to the cafe object
+      }
+
+      // Step 4: Log and return the response
+      console.log(`Total Income from all cafes: ${totalIncome}`);
+      res.status(200).json({ items: cafes, totalIncome, totalOutcome });
+    }
+  } catch (error) {
+    // Improved error handling
+    console.error('Error in fetching analytics:', error);
+    res.status(500).json({
+      message: "An error occurred while fetching analytics.",
+      error: error.message,
+    });
+  }
+};
+
+
+
+async function getAllTenantReports(req, res) {
   try {
     const { type } = req.query; // "daily", "weekly", "monthly", "yearly"
-    
+
     // Step 1: Fetch all tenants (users with roleId = 1)
     const tenants = await User.findAll({
       where: { roleId: 1 }, // Tenants have roleId = 1
-      attributes: ['userId', 'username'] // Fetch userId and username
+      attributes: ['userId', 'username', 'email'] // Fetch userId and username
     });
 
     // Step 2: If no tenants are found, return an empty array
@@ -1616,7 +1710,7 @@ exports.getAllTenantReport = async (req, res) => {
         where: {
           ownerId: tenant.userId // Get cafes for the specific tenant by userId
         },
-        attributes: ['cafeId', 'name', 'image', 'qrPayment', 'qrBackground', 'xposition', 'yposition', 'scale', 'ownerId', 'needsConfirmation', 'welcomePageConfig', 'createdAt', 'updatedAt'] // Cafe details
+        attributes: ['cafeId', 'name', 'image', 'ownerId', 'welcomePageConfig', 'createdAt', 'updatedAt'] // Cafe details
       });
 
       // If the tenant owns no cafes, skip to the next tenant
@@ -1626,12 +1720,15 @@ exports.getAllTenantReport = async (req, res) => {
 
       // Step 6: Fetch reports for each cafe owned by this tenant in parallel
       const reports = await Promise.all(
-        cafes.map(cafe => getReportt(cafe.cafeId, 'monthly')) // Fetch report for each cafe
+        cafes.map(cafe => getReportt(cafe.cafeId, 'monthly', false)) // Fetch report for each cafe
       );
 
       // Step 7: Calculate the total income for the current tenant
       const totalIncomeForTenant = reports.reduce((sum, report) => {
         return sum + (report?.totalIncome || 0); // Add the totalIncome for each cafe's report
+      }, 0);
+      const totalOutcomeForTenant = reports.reduce((sum, report) => {
+        return sum + (report?.currentOutcome || 0); // Add the totalIncome for each cafe's report
       }, 0);
 
       // Add this tenant's total income to the overall total income
@@ -1641,8 +1738,10 @@ exports.getAllTenantReport = async (req, res) => {
       const tenantWithCafesAndReports = {
         userId: tenant.userId,
         username: tenant.username,
+        email: tenant.email,
         totalIncome: totalIncomeForTenant, // Add the total income for this tenant
-        cafes: cafes.map((cafe, index) => ({
+        totalOutcome: totalOutcomeForTenant, // Add the total income for this tenant
+        subItems: cafes.map((cafe, index) => ({
           ...cafe.dataValues, // Include all cafe details
           report: reports[index] // Attach the corresponding report
         }))
@@ -1654,8 +1753,8 @@ exports.getAllTenantReport = async (req, res) => {
 
     // Step 9: Return the final result with tenants, cafes, reports, total income from all tenants
     res.status(200).json({
-      totalIncomeFromAllTenant, // Add the total income from all tenants
-      tenants: tenantCafeReports // Add tenants data with their cafes and reports
+      totalIncome: totalIncomeFromAllTenant, // Add the total income from all tenants
+      items: tenantCafeReports // Add tenants data with their cafes and reports
     });
 
   } catch (error) {

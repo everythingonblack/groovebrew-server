@@ -22,9 +22,9 @@ router.get(
   transactionController.getMyTransactions
 );
 router.get(
-  "/get-transactions-from-cafe/:cafeId",
+  "/get-transactions/:cafeId",
   auth([]),
-  transactionController.getTransactions
+  transactionController.
 );
 
 // router.get("/get-income/:cafeId", transactionController.calculateIncome);

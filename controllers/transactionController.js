@@ -608,16 +608,30 @@ exports.getTransaction = async (req, res) => {
 
 exports.getTransactions = async (req, res) => {
   const { cafeId } = req.params;
-  const { demandLength } = req.query;
+  const { demandLength, idsOnly } = req.query;
+console.log('aaaaaaa')
+  if (req.user.cafeId != cafeId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
   try {
     // Convert demandLength to integer and set limit
     const limit = parseInt(demandLength, 10);
-    const cafe = await Cafe.findByPk(cafeId);
-    // Prepare the base query options
+
+    // Prepare the query options
     const queryOptions = {
-      order: [["createdAt", "DESC"]], // Sort by creation date
-      include: [
+      where: { cafeId: cafeId },
+      order: [["createdAt", "DESC"]], // Sort by creation date, descending
+    };
+
+    // If idsOnly is true, apply the 24-hour filter and only return transactionId
+    if (idsOnly === "true") {
+      const twentyFourHoursAgo = moment().subtract(24, 'hours').toDate();
+      queryOptions.where.createdAt = { [Op.gte]: twentyFourHoursAgo }; // Filter for last 24 hours
+      queryOptions.attributes = ['transactionId']; // Only include transactionId in results
+    } else {
+      // If idsOnly is false or not provided, include related models
+      queryOptions.include = [
         {
           model: DetailedTransaction,
           include: [Item], // Include associated Item model
@@ -625,33 +639,25 @@ exports.getTransactions = async (req, res) => {
         {
           model: Table,
         },
-      ],
-    };
+      ];
 
-    // Determine the where clause
-    if (req.user.cafeId !== cafeId && req.user.userId != cafe.ownerId) {
-      queryOptions.where = {
-        cafeId: cafeId,
-        userId: req.user.userId // Add userId filter if cafeId does not match
-      };
-    } else {
-      queryOptions.where = { cafeId: cafeId }; // Use cafeId filter
-    }
-
-    // Apply the limit if it's not -1
-    if (limit !== -1) {
-      queryOptions.limit = limit;
+      // Apply the limit if it's not -1
+      if (limit !== -1) {
+        queryOptions.limit = limit;
+      }
     }
 
     // Retrieve transactions
     const transactions = await Transaction.findAll(queryOptions);
-
+    console.log(transactions)
+    // Return the response
     res.status(200).json(transactions);
   } catch (error) {
     console.error("Error fetching transactions:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
 
 
 exports.calculateIncome = async (req, res) => {

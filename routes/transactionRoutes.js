@@ -24,7 +24,7 @@ router.get(
 router.get(
   "/get-transactions/:cafeId",
   auth([]),
-  transactionController.
+  transactionController.getTransactions
 );
 
 // router.get("/get-income/:cafeId", transactionController.calculateIncome);

@@ -610,7 +610,10 @@ exports.getTransactions = async (req, res) => {
   const { cafeId } = req.params;
   const { demandLength, idsOnly } = req.query;
 console.log('aaaaaaa')
-  if (req.user.cafeId != cafeId) {
+
+const cafe = await Cafe.findByPk(cafeId);
+
+  if (req.user.cafeId != cafeId && req.user.userId != cafe.ownerId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 

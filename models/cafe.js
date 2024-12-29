@@ -66,6 +66,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      timezone: { // Updated timezone field
+        type: DataTypes.STRING,  // Store timezone, e.g., "Asia/Jakarta"
+        allowNull: false,
+        defaultValue: "Asia/Jakarta",
+      },
       createdAt: {
         allowNull: false,
         type: DataTypes.DATE,

@@ -10,11 +10,15 @@ module.exports = {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
     dialect: process.env.DB_DIALECT,
-    ssl: process.env.DB_SSL === 'true',
+    // ssl: process.env.DB_SSL === 'true',
+    ssl: false,
     dialectOptions: {
       ssl: {
-        require: process.env.DB_SSL_REQUIRE === 'true',
-        rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true'
+        // require: process.env.DB_SSL_REQUIRE === 'true',
+        // rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true'
+      
+        require: false,
+        rejectUnauthorized: false
       }
     },
     define: {

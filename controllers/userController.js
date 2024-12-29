@@ -121,7 +121,7 @@ exports.updateUser = async (req, res) => {
       return res.status(400).json({ error: "Username is already in use" });
     }
 
-    if (password.length < 16) {
+    if (password.length < 6) {
       return res.status(400).json({ error: "Password is too short" });
     }
 
@@ -131,7 +131,7 @@ exports.updateUser = async (req, res) => {
     req.user.password = await bcrypt.hash(password, 10);
     await req.user.save();
 
-    res.status(200).json(req.user);
+    return res.status(200).json({ message: 'User updated successfully' });
   } catch (error) {
     console.error("Error updating user:", error);
     res.status(500).json({ error: "Internal server error" });

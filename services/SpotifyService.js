@@ -645,7 +645,7 @@ class SpotifyService {
       let room = this.rooms[roomId] || { queue: [] }; // Initialize queue as an empty array if it doesn't exist
       // room.queue = room.queue || []; // Ensure room.queue is initialized as an empty array if it doesn't exist
       console.log(room.queue)
-      if (room.queue.length > 0) {
+      if (room.queue && room.queue.length > 0) {
         const existingIndex = room.queue.findIndex((item) => item[0]?.trackId == track.trackId);
         if (existingIndex !== -1) {
           // If the song already exists in the queue, just call voteForSong with the agree parameter
@@ -657,7 +657,7 @@ class SpotifyService {
         }
       }
       else {
-        room = { queue: [] }
+        room = { ...room, queue: [] };
         room.queue.push([track, [userId], [], false, false]);
         console.log("pushing")
       }

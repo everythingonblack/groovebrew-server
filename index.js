@@ -9,6 +9,8 @@ const querystring = require("querystring");
 const webpush = require("web-push");
 const bcrypt = require("bcrypt");
 
+const moment = require("moment");
+
 // Load environment variables once, based on NODE_ENV
 dotenv.config({
   path: process.env.NODE_ENV === "production" ? ".env.production" : ".env.development",
@@ -322,7 +324,7 @@ io.on("connection", async (socket) => {
   socket.on('authenticate', async (data) => {
     const { token, shopId } = data;
     console.log('authenticating' + token + shopId)
-    console.log(spotifyService.rooms[shopId]?.playerToken)
+    console.log(spotifyService.rooms[shopId])
     // Validate the token
     if (token == "null" || token == "" || spotifyService.rooms[shopId]?.playerToken != token) {
       // Emit the 'claimPlayerRes' event with error response
@@ -383,8 +385,9 @@ io.on("connection", async (socket) => {
 
   socket.on('editQueue', async (data) => {
     const { token, shopId, editedQueue } = data;
-    console.log('authenticating' + token + shopId)
-    console.log(spotifyService.rooms[shopId]?.playerToken)
+    console.log('authenticating' + editedQueue)
+    console.log(shopId)
+    console.log(spotifyService.rooms[shopId])
     // Validate the token
     if (token == "null" || token == "" || spotifyService.rooms[shopId]?.playerToken != token) {
       // Emit the 'claimPlayerRes' event with error response
@@ -717,13 +720,62 @@ app.use("/transaction", transactionRoutes);
 const cron = require("node-cron");
 const {
   createReportForAllCafes,
+  generateReport
 } = require("./controllers/transactionController");
 
 // Schedule a task to run every day at midnight
-cron.schedule("0 17 * * *", async () => {
-  console.log("Running daily report generation for all cafes...");
-  await createReportForAllCafes();
+// cron.schedule("04 07 * * *", async () => {
+//   console.log("Running daily report generation for all cafes...");
+//   await createReportForAllCafes();
+// });
+
+
+// Function to create a manipulated UTC date
+const getUtc = () => {
+  // Set the UTC time you want, for example: 2024-12-29T17:00:00Z
+  const manipulatedUTC = moment.utc('2024-12-29T17:34:30Z');
+  
+  // Return the manipulated UTC time
+  return manipulatedUTC;
+};
+
+// Cron job running every minute to check for simulated midnight
+const cronExpression = '*/1 * * * *';
+
+cron.schedule(cronExpression, async () => {
+  try {
+    // Get all cafes
+    const cafes = await Cafe.findAll();
+
+    // Loop through each cafe to check if it's their simulated midnight in local time
+    for (let cafe of cafes) {
+      const cafeTimezone = cafe.timezone || 'Asia/Jakarta'; // Default to 'Asia/Jakarta' if no timezone set
+
+      // Get the manipulated UTC time
+      const manipulatedUTC = getUtc();
+
+      // Convert manipulated UTC time to the cafe's local time
+      const localTime = manipulatedUTC.clone().tz(cafeTimezone);
+
+      // Log the local time for debugging purposes
+      console.log(`Local time for ${cafe.name} (${cafeTimezone}): ${localTime.format()}`);
+
+      // Check if it's midnight (00:00) in the cafe's local timezone
+      const isMidnight = (localTime.hour() === 0 && localTime.minute() >= 0) || (localTime.hour() === 1 && localTime.minute() === 0);
+
+      console.log(isMidnight);  // This will now log true when it's midnight (00:00) in local time
+
+      if (isMidnight) {
+        // Generate the daily report for this cafe at manipulated UTC time
+        await generateReport(cafe.cafeId, localTime, cafeTimezone);
+        console.log(`Daily report generated for cafe ${cafe.name} at manipulated UTC time ${manipulatedUTC.format()}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error during cron job execution:', error);
+  }
 });
+
 
 const PORT = process.env.PORT || 5000;
 

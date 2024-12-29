@@ -1301,6 +1301,219 @@ exports.createReportForAllCafes = async () => {
   }
 };
 
+
+const get24hback = (now) => {
+  // Clone `now` to avoid modifying the original object
+  let nn = now.clone(); // For moment.js or dayjs, use `.clone()`
+  nn.set('hours', 0);
+  nn.set('minutes', 0);
+  nn.set('seconds', 0);
+  nn.set('milliseconds', 0);
+  
+  // Subtract one day from the cloned date
+  nn.subtract(1, 'days');
+  
+  return nn;
+};
+
+
+exports.generateReport = async (cafeId, now, cafeTimezone) => {
+  const endOfDay = now;
+  console.log("end"+endOfDay)
+  const startOfDay = get24hback(now); // Midnight of the previous day
+
+  console.log("start"+startOfDay)
+  // Find all detailed transactions for the specified cafe within the last day
+  const detailedTransactions = await DetailedTransaction.findAll({
+    where: {
+      createdAt: {
+        [Op.between]: [startOfDay, endOfDay],
+      },
+      '$Transaction.cafeId$': cafeId, // Join on cafeId
+    },
+    include: [{
+      model: Transaction,
+      attributes: ['transactionId'], // Include transactionId to track transactions
+    }, {
+      model: Item, // Assuming you have an Item model to get item price
+      attributes: ['itemId', 'price'], // Include itemId and price
+    }],
+  });
+  
+  console.log("start"+startOfDay)
+  console.log("end"+endOfDay)
+  console.log(detailedTransactions)
+  // Fetch material mutations for the specified cafe
+  const materialMutations = await MaterialMutation.findAll({
+    include: [
+      {
+        model: Material,
+        where: { cafeId },
+        attributes: [],
+      },
+    ],
+    where: {
+      newStock: { [Op.gt]: sequelize.col("oldStock") },
+      createdAt: {
+        [Op.between]: [startOfDay, endOfDay]
+      },
+    },
+  });
+
+  // Initialize hourly bins for income, outcome, transactions, and materialIds
+  const hourlyData = {
+    hour1To3: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour4To6: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour7To9: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour10To12: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour13To15: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour16To18: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour19To21: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour22To24: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+  };
+
+  detailedTransactions.forEach(detailedTransaction => {
+    const transactionId = detailedTransaction.Transaction.transactionId;
+    const itemId = detailedTransaction.itemId;
+    const sold = detailedTransaction.qty;
+    const price = detailedTransaction.Item.price; // Get item price
+    const createdAt = moment(detailedTransaction.createdAt).tz(cafeTimezone); // Convert to cafe's local time
+  
+    // Determine the time period (hour) for the transaction based on cafe's local time
+    const hour = createdAt.hours(); // Get the hour after conversion to local time
+    let hourRange = '';
+    
+    if (hour >= 1 && hour < 3) {
+      hourRange = 'hour1To3';
+    } else if (hour >= 4 && hour < 6) {
+      hourRange = 'hour4To6';
+    } else if (hour >= 7 && hour < 9) {
+      hourRange = 'hour7To9';
+    } else if (hour >= 10 && hour < 12) {
+      hourRange = 'hour10To12';
+    } else if (hour >= 13 && hour < 15) {
+      hourRange = 'hour13To15';
+    } else if (hour >= 16 && hour < 18) {
+      hourRange = 'hour16To18';
+    } else if (hour >= 19 && hour < 21) {
+      hourRange = 'hour19To21';
+    } else {
+      hourRange = 'hour22To24';
+    }
+  
+    // Calculate the total price for this item sold in the current transaction
+    const totalPrice = sold * price;
+  
+    // Update the corresponding hourly data (income, outcome, transactions, materials)
+    hourlyData[hourRange].income += totalPrice;
+    hourlyData[hourRange].transactions.push({
+      transactionId,
+      itemId,
+      sold,
+      totalPrice,
+    });
+  });
+  
+  // Process material mutations and categorize them by hour, and calculate outcome
+  materialMutations.forEach(mutation => {
+    const materialId = mutation.dataValues.materialId;
+    const priceAtp = mutation.dataValues.priceAtp;
+    const stockDifference = mutation.dataValues.newStock - mutation.dataValues.oldStock;
+    const createdAt = moment(mutation.createdAt).tz(cafeTimezone); // Convert to cafe's local time
+
+    // Determine the time period (hour) for the mutation based on cafe's local time
+    const hour = createdAt.hours();
+    let hourRange = '';
+    if (hour >= 1 && hour < 3) {
+      hourRange = 'hour1To3';
+    } else if (hour >= 4 && hour < 6) {
+      hourRange = 'hour4To6';
+    } else if (hour >= 7 && hour < 9) {
+      hourRange = 'hour7To9';
+    } else if (hour >= 10 && hour < 12) {
+      hourRange = 'hour10To12';
+    } else if (hour >= 13 && hour < 15) {
+      hourRange = 'hour13To15';
+    } else if (hour >= 16 && hour < 18) {
+      hourRange = 'hour16To18';
+    } else if (hour >= 19 && hour < 21) {
+      hourRange = 'hour19To21';
+    } else {
+      hourRange = 'hour22To24';
+    }
+
+    // Calculate the outcome for this material mutation (priceAtp * stockDifference)
+    const materialOutcome = priceAtp * stockDifference;
+
+    // Update the corresponding hourly outcome
+    hourlyData[hourRange].outcome += materialOutcome;
+
+    // Add the materialId and details for each mutation
+    hourlyData[hourRange].materialIds.push({
+      materialId,
+      priceAtp,
+      stockDifference,
+      materialOutcome,
+    });
+  });
+
+  // Calculate the total income, outcome, and transactions for the entire day
+  const totalIncome = Object.values(hourlyData).reduce((acc, data) => acc + data.income, 0);
+  const totalOutcome = Object.values(hourlyData).reduce((acc, data) => acc + data.outcome, 0);
+  const totalTransactions = Object.values(hourlyData).reduce((acc, data) => acc + data.transactions.length, 0);
+
+  // Save the new daily report to the database
+  await DailyReport.create({
+    date: startOfDay,
+    cafeId,
+    hour1To3Income: hourlyData.hour1To3.income,
+    hour1To3Outcome: hourlyData.hour1To3.outcome,
+    hour1To3Transactions: JSON.stringify(hourlyData.hour1To3.transactions), // Store TransactionIds as JSON
+    hour1To3MaterialIds: JSON.stringify(hourlyData.hour1To3.materialIds),
+
+    hour4To6Income: hourlyData.hour4To6.income,
+    hour4To6Outcome: hourlyData.hour4To6.outcome,
+    hour4To6Transactions: JSON.stringify(hourlyData.hour4To6.transactions),
+    hour4To6MaterialIds: JSON.stringify(hourlyData.hour4To6.materialIds),
+
+    hour7To9Income: hourlyData.hour7To9.income,
+    hour7To9Outcome: hourlyData.hour7To9.outcome,
+    hour7To9Transactions: JSON.stringify(hourlyData.hour7To9.transactions),
+    hour7To9MaterialIds: JSON.stringify(hourlyData.hour7To9.materialIds),
+
+    hour10To12Income: hourlyData.hour10To12.income,
+    hour10To12Outcome: hourlyData.hour10To12.outcome,
+    hour10To12Transactions: JSON.stringify(hourlyData.hour10To12.transactions),
+    hour10To12MaterialIds: JSON.stringify(hourlyData.hour10To12.materialIds),
+
+    hour13To15Income: hourlyData.hour13To15.income,
+    hour13To15Outcome: hourlyData.hour13To15.outcome,
+    hour13To15Transactions: JSON.stringify(hourlyData.hour13To15.transactions),
+    hour13To15MaterialIds: JSON.stringify(hourlyData.hour13To15.materialIds),
+
+    hour16To18Income: hourlyData.hour16To18.income,
+    hour16To18Outcome: hourlyData.hour16To18.outcome,
+    hour16To18Transactions: JSON.stringify(hourlyData.hour16To18.transactions),
+    hour16To18MaterialIds: JSON.stringify(hourlyData.hour16To18.materialIds),
+
+    hour19To21Income: hourlyData.hour19To21.income,
+    hour19To21Outcome: hourlyData.hour19To21.outcome,
+    hour19To21Transactions: JSON.stringify(hourlyData.hour19To21.transactions),
+    hour19To21MaterialIds: JSON.stringify(hourlyData.hour19To21.materialIds),
+
+    hour22To24Income: hourlyData.hour22To24.income,
+    hour22To24Outcome: hourlyData.hour22To24.outcome,
+    hour22To24Transactions: JSON.stringify(hourlyData.hour22To24.transactions),
+    hour22To24MaterialIds: JSON.stringify(hourlyData.hour22To24.materialIds),
+
+    totalIncome,
+    totalOutcome,
+    totalTransactions
+  });
+
+  console.log(`Report generated for cafe ${cafeId} on ${startOfDay.format()}`);
+};
+
 const getStartOfDayMinus24Hours = () => {
   const date = new Date();
   date.setHours(0, 0, 0, 0); // Sets to start of the current day (12:00 AM)
@@ -1322,13 +1535,14 @@ const generateDailyReport = async (cafeId) => {
     },
     include: [{
       model: Transaction,
-      attributes: [], // We don't need any attributes from Transaction
+      attributes: ['transactionId'], // Include transactionId to track transactions
     }, {
       model: Item, // Assuming you have an Item model to get item price
       attributes: ['itemId', 'price'], // Include itemId and price
     }],
   });
 
+  // Fetch material mutations for the specified cafe
   const materialMutations = await MaterialMutation.findAll({
     include: [
       {
@@ -1345,52 +1559,160 @@ const generateDailyReport = async (cafeId) => {
     },
   });
 
-  // Organize data for the report
-  const reportData = {};
+  // Initialize hourly bins for income, outcome, transactions, and materialIds
+  const hourlyData = {
+    hour1To3: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour4To6: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour7To9: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour10To12: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour13To15: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour16To18: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour19To21: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour22To24: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+  };
 
+  // Process detailed transactions and categorize them by hour
   detailedTransactions.forEach(detailedTransaction => {
-    const transactionId = detailedTransaction.transactionId;
+    const transactionId = detailedTransaction.Transaction.transactionId;
     const itemId = detailedTransaction.itemId;
     const sold = detailedTransaction.qty;
     const price = detailedTransaction.Item.price; // Get item price
+    const createdAt = new Date(detailedTransaction.createdAt); // Transaction time
 
-    // Initialize the transaction entry if it doesn't exist
-    if (!reportData[transactionId]) {
-      reportData[transactionId] = [];
-    }
-
-    // Find if the item already exists in the array for this transaction
-    const existingItem = reportData[transactionId].find(item => item.itemId === itemId);
-    if (existingItem) {
-      existingItem.sold += sold; // Update sold count
+    // Determine the time period (hour) for the transaction
+    const hour = createdAt.getHours();
+    let hourRange = '';
+    if (hour >= 1 && hour < 3) {
+      hourRange = 'hour1To3';
+    } else if (hour >= 4 && hour < 6) {
+      hourRange = 'hour4To6';
+    } else if (hour >= 7 && hour < 9) {
+      hourRange = 'hour7To9';
+    } else if (hour >= 10 && hour < 12) {
+      hourRange = 'hour10To12';
+    } else if (hour >= 13 && hour < 15) {
+      hourRange = 'hour13To15';
+    } else if (hour >= 16 && hour < 18) {
+      hourRange = 'hour16To18';
+    } else if (hour >= 19 && hour < 21) {
+      hourRange = 'hour19To21';
     } else {
-      reportData[transactionId].push({ itemId, sold, price }); // Add new item with price
+      hourRange = 'hour22To24';
     }
+
+    // Calculate the total price for this item sold in the current transaction
+    const totalPrice = sold * price;
+
+    // Update the corresponding hourly data (income, outcome, transactions, materials)
+    hourlyData[hourRange].income += totalPrice;
+    hourlyData[hourRange].transactions.push({
+      transactionId,
+      itemId,
+      sold,
+      totalPrice,
+    });
   });
 
-  // Convert reportData to the desired format
-  const formattedReportData = Object.entries(reportData).map(([transactionId, itemsSold]) => ({
-    transactionId: parseInt(transactionId, 10),
-    itemsSold,
-  }));
+  // Process material mutations and categorize them by hour, and calculate outcome
+  materialMutations.forEach(mutation => {
+    const materialId = mutation.dataValues.materialId;
+    const priceAtp = mutation.dataValues.priceAtp;
+    const stockDifference = mutation.dataValues.newStock - mutation.dataValues.oldStock;
+    const createdAt = new Date(mutation.createdAt); // Mutation time
 
-  // Prepare materialsPurchased from materialMutations
-  const materialsPurchased = materialMutations.map(mutation => ({
-    mutationId: mutation.dataValues.mutationId,
-    priceAtp: mutation.dataValues.priceAtp,
-    stockDifference: mutation.dataValues.newStock - mutation.dataValues.oldStock
-  }));
+    // Determine the time period (hour) for the mutation
+    const hour = createdAt.getHours();
+    let hourRange = '';
+    if (hour >= 1 && hour < 3) {
+      hourRange = 'hour1To3';
+    } else if (hour >= 4 && hour < 6) {
+      hourRange = 'hour4To6';
+    } else if (hour >= 7 && hour < 9) {
+      hourRange = 'hour7To9';
+    } else if (hour >= 10 && hour < 12) {
+      hourRange = 'hour10To12';
+    } else if (hour >= 13 && hour < 15) {
+      hourRange = 'hour13To15';
+    } else if (hour >= 16 && hour < 18) {
+      hourRange = 'hour16To18';
+    } else if (hour >= 19 && hour < 21) {
+      hourRange = 'hour19To21';
+    } else {
+      hourRange = 'hour22To24';
+    }
 
-  // Save the report to DailyReport
+    // Calculate the outcome for this material mutation (priceAtp * stockDifference)
+    const materialOutcome = priceAtp * stockDifference;
+
+    // Update the corresponding hourly outcome
+    hourlyData[hourRange].outcome += materialOutcome;
+
+    // Add the materialId and details for each mutation
+    hourlyData[hourRange].materialIds.push({
+      materialId,
+      priceAtp,
+      stockDifference,
+      materialOutcome,
+    });
+  });
+
+  // Calculate the total income, outcome, and transactions for the entire day
+  const totalIncome = Object.values(hourlyData).reduce((acc, data) => acc + data.income, 0);
+  const totalOutcome = Object.values(hourlyData).reduce((acc, data) => acc + data.outcome, 0);
+  const totalTransactions = Object.values(hourlyData).reduce((acc, data) => acc + data.transactions.length, 0);
+
+  // Save the new daily report to the database
   await DailyReport.create({
-    reportDate: startOfDay,
+    date: startOfDay,
     cafeId,
-    itemsSold: formattedReportData,
-    materialsPurchased, // Add materialsPurchased here
+    hour1To3Income: hourlyData.hour1To3.income,
+    hour1To3Outcome: hourlyData.hour1To3.outcome,
+    hour1To3Transactions: JSON.stringify(hourlyData.hour1To3.transactions), // Store TransactionIds as JSON
+    hour1To3MaterialIds: JSON.stringify(hourlyData.hour1To3.materialIds),
+
+    hour4To6Income: hourlyData.hour4To6.income,
+    hour4To6Outcome: hourlyData.hour4To6.outcome,
+    hour4To6Transactions: JSON.stringify(hourlyData.hour4To6.transactions),
+    hour4To6MaterialIds: JSON.stringify(hourlyData.hour4To6.materialIds),
+
+    hour7To9Income: hourlyData.hour7To9.income,
+    hour7To9Outcome: hourlyData.hour7To9.outcome,
+    hour7To9Transactions: JSON.stringify(hourlyData.hour7To9.transactions),
+    hour7To9MaterialIds: JSON.stringify(hourlyData.hour7To9.materialIds),
+
+    hour10To12Income: hourlyData.hour10To12.income,
+    hour10To12Outcome: hourlyData.hour10To12.outcome,
+    hour10To12Transactions: JSON.stringify(hourlyData.hour10To12.transactions),
+    hour10To12MaterialIds: JSON.stringify(hourlyData.hour10To12.materialIds),
+
+    hour13To15Income: hourlyData.hour13To15.income,
+    hour13To15Outcome: hourlyData.hour13To15.outcome,
+    hour13To15Transactions: JSON.stringify(hourlyData.hour13To15.transactions),
+    hour13To15MaterialIds: JSON.stringify(hourlyData.hour13To15.materialIds),
+
+    hour16To18Income: hourlyData.hour16To18.income,
+    hour16To18Outcome: hourlyData.hour16To18.outcome,
+    hour16To18Transactions: JSON.stringify(hourlyData.hour16To18.transactions),
+    hour16To18MaterialIds: JSON.stringify(hourlyData.hour16To18.materialIds),
+
+    hour19To21Income: hourlyData.hour19To21.income,
+    hour19To21Outcome: hourlyData.hour19To21.outcome,
+    hour19To21Transactions: JSON.stringify(hourlyData.hour19To21.transactions),
+    hour19To21MaterialIds: JSON.stringify(hourlyData.hour19To21.materialIds),
+
+    hour22To24Income: hourlyData.hour22To24.income,
+    hour22To24Outcome: hourlyData.hour22To24.outcome,
+    hour22To24Transactions: JSON.stringify(hourlyData.hour22To24.transactions),
+    hour22To24MaterialIds: JSON.stringify(hourlyData.hour22To24.materialIds),
+
+    totalIncome,
+    totalOutcome,
+    totalTransactions,
   });
 
   console.log(`Daily report generated for ${startOfDay} for cafe ${cafeId}`);
 };
+
 
 async function getReportt(cafeId, filter, getAll = true) {
   const today = moment(); // Get current date

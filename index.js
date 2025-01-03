@@ -733,14 +733,16 @@ const {
 // Function to create a manipulated UTC date
 const getUtc = () => {
   // Set the UTC time you want, for example: 2024-12-29T17:00:00Z
-  const manipulatedUTC = moment.utc('2024-12-29T17:34:30Z');
+  // const utc = moment.utc('2024-12-30T17:00:00Z');
+  const utc = moment.utc();
+
   
   // Return the manipulated UTC time
-  return manipulatedUTC;
+  return utc;
 };
 
 // Cron job running every minute to check for simulated midnight
-const cronExpression = '*/1 * * * *';
+const cronExpression = '0 * * * *';
 
 cron.schedule(cronExpression, async () => {
   try {

@@ -28,7 +28,10 @@ exports.transactionFromClerk = async (req, res) => {
   console.log("fromclerk");
   const { cafeId } = req.params;
   console.log(req.user)
-  if (req.user.cafeId != cafeId) {
+
+  const cafe = await Cafe.findByPk(cafeId);
+  console.log(cafe.ownerId)
+  if (req.user.cafeId != cafeId && req.user.userId != cafe.ownerId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -609,9 +612,9 @@ exports.getTransaction = async (req, res) => {
 exports.getTransactions = async (req, res) => {
   const { cafeId } = req.params;
   const { demandLength, idsOnly } = req.query;
-console.log('aaaaaaa')
+  console.log('aaaaaaa')
 
-const cafe = await Cafe.findByPk(cafeId);
+  const cafe = await Cafe.findByPk(cafeId);
 
   if (req.user.cafeId != cafeId && req.user.userId != cafe.ownerId) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -1309,20 +1312,19 @@ const get24hback = (now) => {
   nn.set('minutes', 0);
   nn.set('seconds', 0);
   nn.set('milliseconds', 0);
-  
+
   // Subtract one day from the cloned date
   nn.subtract(1, 'days');
-  
+
   return nn;
 };
 
-
 exports.generateReport = async (cafeId, now, cafeTimezone) => {
+  const createdDate = new Date(now).toISOString();
+
   const endOfDay = now;
-  console.log("end"+endOfDay)
   const startOfDay = get24hback(now); // Midnight of the previous day
 
-  console.log("start"+startOfDay)
   // Find all detailed transactions for the specified cafe within the last day
   const detailedTransactions = await DetailedTransaction.findAll({
     where: {
@@ -1336,20 +1338,17 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
       attributes: ['transactionId'], // Include transactionId to track transactions
     }, {
       model: Item, // Assuming you have an Item model to get item price
-      attributes: ['itemId', 'price'], // Include itemId and price
+      attributes: ['itemId', 'name', 'price'], // Include itemId and price
     }],
   });
-  
-  console.log("start"+startOfDay)
-  console.log("end"+endOfDay)
-  console.log(detailedTransactions)
+
   // Fetch material mutations for the specified cafe
   const materialMutations = await MaterialMutation.findAll({
     include: [
       {
         model: Material,
         where: { cafeId },
-        attributes: [],
+        attributes: ['name'],
       },
     ],
     where: {
@@ -1362,61 +1361,69 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
 
   // Initialize hourly bins for income, outcome, transactions, and materialIds
   const hourlyData = {
-    hour1To3: { income: 0, outcome: 0, transactions: [], materialIds: [] },
-    hour4To6: { income: 0, outcome: 0, transactions: [], materialIds: [] },
-    hour7To9: { income: 0, outcome: 0, transactions: [], materialIds: [] },
-    hour10To12: { income: 0, outcome: 0, transactions: [], materialIds: [] },
-    hour13To15: { income: 0, outcome: 0, transactions: [], materialIds: [] },
-    hour16To18: { income: 0, outcome: 0, transactions: [], materialIds: [] },
-    hour19To21: { income: 0, outcome: 0, transactions: [], materialIds: [] },
-    hour22To24: { income: 0, outcome: 0, transactions: [], materialIds: [] },
+    hour0To3: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour3To6: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour6To9: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour9To12: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour12To15: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour15To18: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour18To21: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour21To24: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() }
   };
 
   detailedTransactions.forEach(detailedTransaction => {
     const transactionId = detailedTransaction.Transaction.transactionId;
     const itemId = detailedTransaction.itemId;
+    const itemName = detailedTransaction.Item.dataValues.name;
     const sold = detailedTransaction.qty;
     const price = detailedTransaction.Item.price; // Get item price
     const createdAt = moment(detailedTransaction.createdAt).tz(cafeTimezone); // Convert to cafe's local time
-  
+
     // Determine the time period (hour) for the transaction based on cafe's local time
     const hour = createdAt.hours(); // Get the hour after conversion to local time
     let hourRange = '';
-    
-    if (hour >= 1 && hour < 3) {
-      hourRange = 'hour1To3';
-    } else if (hour >= 4 && hour < 6) {
-      hourRange = 'hour4To6';
-    } else if (hour >= 7 && hour < 9) {
-      hourRange = 'hour7To9';
-    } else if (hour >= 10 && hour < 12) {
-      hourRange = 'hour10To12';
-    } else if (hour >= 13 && hour < 15) {
-      hourRange = 'hour13To15';
-    } else if (hour >= 16 && hour < 18) {
-      hourRange = 'hour16To18';
-    } else if (hour >= 19 && hour < 21) {
-      hourRange = 'hour19To21';
-    } else {
-      hourRange = 'hour22To24';
+
+    if (hour >= 0 && hour < 3) {
+      hourRange = 'hour0To3';
+    } else if (hour >= 3 && hour < 6) {
+      hourRange = 'hour3To6';
+    } else if (hour >= 6 && hour < 9) {
+      hourRange = 'hour6To9';
+    } else if (hour >= 9 && hour < 12) {
+      hourRange = 'hour9To12';
+    } else if (hour >= 12 && hour < 15) {
+      hourRange = 'hour12To15';
+    } else if (hour >= 15 && hour < 18) {
+      hourRange = 'hour15To18';
+    } else if (hour >= 18 && hour < 21) {
+      hourRange = 'hour18To21';
+    } else if (hour >= 21 && hour < 24) {
+      hourRange = 'hour21To24';
     }
-  
+
     // Calculate the total price for this item sold in the current transaction
     const totalPrice = sold * price;
-  
+
     // Update the corresponding hourly data (income, outcome, transactions, materials)
     hourlyData[hourRange].income += totalPrice;
+
+    // Add the transaction to the unique transactions set (to avoid double counting)
+    hourlyData[hourRange].uniqueTransactions.add(transactionId);
+
+    // Push the item details to the transactions array (for reporting purposes)
     hourlyData[hourRange].transactions.push({
       transactionId,
       itemId,
+      itemName,
       sold,
       totalPrice,
     });
   });
-  
+
   // Process material mutations and categorize them by hour, and calculate outcome
   materialMutations.forEach(mutation => {
     const materialId = mutation.dataValues.materialId;
+    const materialName = mutation.Material.dataValues.name;
     const priceAtp = mutation.dataValues.priceAtp;
     const stockDifference = mutation.dataValues.newStock - mutation.dataValues.oldStock;
     const createdAt = moment(mutation.createdAt).tz(cafeTimezone); // Convert to cafe's local time
@@ -1424,22 +1431,23 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
     // Determine the time period (hour) for the mutation based on cafe's local time
     const hour = createdAt.hours();
     let hourRange = '';
-    if (hour >= 1 && hour < 3) {
-      hourRange = 'hour1To3';
-    } else if (hour >= 4 && hour < 6) {
-      hourRange = 'hour4To6';
-    } else if (hour >= 7 && hour < 9) {
-      hourRange = 'hour7To9';
-    } else if (hour >= 10 && hour < 12) {
-      hourRange = 'hour10To12';
-    } else if (hour >= 13 && hour < 15) {
-      hourRange = 'hour13To15';
-    } else if (hour >= 16 && hour < 18) {
-      hourRange = 'hour16To18';
-    } else if (hour >= 19 && hour < 21) {
-      hourRange = 'hour19To21';
-    } else {
-      hourRange = 'hour22To24';
+
+    if (hour >= 0 && hour < 3) {
+      hourRange = 'hour0To3';
+    } else if (hour >= 3 && hour < 6) {
+      hourRange = 'hour3To6';
+    } else if (hour >= 6 && hour < 9) {
+      hourRange = 'hour6To9';
+    } else if (hour >= 9 && hour < 12) {
+      hourRange = 'hour9To12';
+    } else if (hour >= 12 && hour < 15) {
+      hourRange = 'hour12To15';
+    } else if (hour >= 15 && hour < 18) {
+      hourRange = 'hour15To18';
+    } else if (hour >= 18 && hour < 21) {
+      hourRange = 'hour18To21';
+    } else if (hour >= 21 && hour < 24) {
+      hourRange = 'hour21To24';
     }
 
     // Calculate the outcome for this material mutation (priceAtp * stockDifference)
@@ -1451,6 +1459,7 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
     // Add the materialId and details for each mutation
     hourlyData[hourRange].materialIds.push({
       materialId,
+      materialName,
       priceAtp,
       stockDifference,
       materialOutcome,
@@ -1460,51 +1469,55 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
   // Calculate the total income, outcome, and transactions for the entire day
   const totalIncome = Object.values(hourlyData).reduce((acc, data) => acc + data.income, 0);
   const totalOutcome = Object.values(hourlyData).reduce((acc, data) => acc + data.outcome, 0);
-  const totalTransactions = Object.values(hourlyData).reduce((acc, data) => acc + data.transactions.length, 0);
+
+  // Now use the uniqueTransactions set to calculate totalTransactions
+  const totalTransactions = Object.values(hourlyData).reduce((acc, data) => acc + data.uniqueTransactions.size, 0);
 
   // Save the new daily report to the database
   await DailyReport.create({
-    date: startOfDay,
+    date: createdDate,
     cafeId,
-    hour1To3Income: hourlyData.hour1To3.income,
-    hour1To3Outcome: hourlyData.hour1To3.outcome,
-    hour1To3Transactions: JSON.stringify(hourlyData.hour1To3.transactions), // Store TransactionIds as JSON
-    hour1To3MaterialIds: JSON.stringify(hourlyData.hour1To3.materialIds),
 
-    hour4To6Income: hourlyData.hour4To6.income,
-    hour4To6Outcome: hourlyData.hour4To6.outcome,
-    hour4To6Transactions: JSON.stringify(hourlyData.hour4To6.transactions),
-    hour4To6MaterialIds: JSON.stringify(hourlyData.hour4To6.materialIds),
+    // Updated field names based on new hourly ranges
+    hour0To3Income: hourlyData.hour0To3.income,
+    hour0To3Outcome: hourlyData.hour0To3.outcome,
+    hour0To3Transactions: hourlyData.hour0To3.transactions, // Store TransactionIds as JSON
+    hour0To3MaterialIds: hourlyData.hour0To3.materialIds,
 
-    hour7To9Income: hourlyData.hour7To9.income,
-    hour7To9Outcome: hourlyData.hour7To9.outcome,
-    hour7To9Transactions: JSON.stringify(hourlyData.hour7To9.transactions),
-    hour7To9MaterialIds: JSON.stringify(hourlyData.hour7To9.materialIds),
+    hour3To6Income: hourlyData.hour3To6.income,
+    hour3To6Outcome: hourlyData.hour3To6.outcome,
+    hour3To6Transactions: hourlyData.hour3To6.transactions,
+    hour3To6MaterialIds: hourlyData.hour3To6.materialIds,
 
-    hour10To12Income: hourlyData.hour10To12.income,
-    hour10To12Outcome: hourlyData.hour10To12.outcome,
-    hour10To12Transactions: JSON.stringify(hourlyData.hour10To12.transactions),
-    hour10To12MaterialIds: JSON.stringify(hourlyData.hour10To12.materialIds),
+    hour6To9Income: hourlyData.hour6To9.income,
+    hour6To9Outcome: hourlyData.hour6To9.outcome,
+    hour6To9Transactions: hourlyData.hour6To9.transactions,
+    hour6To9MaterialIds: hourlyData.hour6To9.materialIds,
 
-    hour13To15Income: hourlyData.hour13To15.income,
-    hour13To15Outcome: hourlyData.hour13To15.outcome,
-    hour13To15Transactions: JSON.stringify(hourlyData.hour13To15.transactions),
-    hour13To15MaterialIds: JSON.stringify(hourlyData.hour13To15.materialIds),
+    hour9To12Income: hourlyData.hour9To12.income,
+    hour9To12Outcome: hourlyData.hour9To12.outcome,
+    hour9To12Transactions: hourlyData.hour9To12.transactions,
+    hour9To12MaterialIds: hourlyData.hour9To12.materialIds,
 
-    hour16To18Income: hourlyData.hour16To18.income,
-    hour16To18Outcome: hourlyData.hour16To18.outcome,
-    hour16To18Transactions: JSON.stringify(hourlyData.hour16To18.transactions),
-    hour16To18MaterialIds: JSON.stringify(hourlyData.hour16To18.materialIds),
+    hour12To15Income: hourlyData.hour12To15.income,
+    hour12To15Outcome: hourlyData.hour12To15.outcome,
+    hour12To15Transactions: hourlyData.hour12To15.transactions,
+    hour12To15MaterialIds: hourlyData.hour12To15.materialIds,
 
-    hour19To21Income: hourlyData.hour19To21.income,
-    hour19To21Outcome: hourlyData.hour19To21.outcome,
-    hour19To21Transactions: JSON.stringify(hourlyData.hour19To21.transactions),
-    hour19To21MaterialIds: JSON.stringify(hourlyData.hour19To21.materialIds),
+    hour15To18Income: hourlyData.hour15To18.income,
+    hour15To18Outcome: hourlyData.hour15To18.outcome,
+    hour15To18Transactions: hourlyData.hour15To18.transactions,
+    hour15To18MaterialIds: hourlyData.hour15To18.materialIds,
 
-    hour22To24Income: hourlyData.hour22To24.income,
-    hour22To24Outcome: hourlyData.hour22To24.outcome,
-    hour22To24Transactions: JSON.stringify(hourlyData.hour22To24.transactions),
-    hour22To24MaterialIds: JSON.stringify(hourlyData.hour22To24.materialIds),
+    hour18To21Income: hourlyData.hour18To21.income,
+    hour18To21Outcome: hourlyData.hour18To21.outcome,
+    hour18To21Transactions: hourlyData.hour18To21.transactions,
+    hour18To21MaterialIds: hourlyData.hour18To21.materialIds,
+
+    hour21To24Income: hourlyData.hour21To24.income,
+    hour21To24Outcome: hourlyData.hour21To24.outcome,
+    hour21To24Transactions: hourlyData.hour21To24.transactions,
+    hour21To24MaterialIds: hourlyData.hour21To24.materialIds,
 
     totalIncome,
     totalOutcome,
@@ -1513,6 +1526,7 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
 
   console.log(`Report generated for cafe ${cafeId} on ${startOfDay.format()}`);
 };
+
 
 const getStartOfDayMinus24Hours = () => {
   const date = new Date();
@@ -1941,8 +1955,432 @@ async function getReportt(cafeId, filter, getAll = true) {
   };
 };
 
-
 exports.getReport = async (req, res) => {
+  try {
+    const { cafeId } = req.params;
+    const { type } = req.query; // "yesterday", "weekly", "monthly", "yearly"
+
+    // Fetch cafe's timezone (ensure this data exists in your database)
+    const cafe = await Cafe.findByPk(cafeId);
+    if (!cafe || !cafe.timezone) {
+      return res.status(404).json({ error: 'Cafe not found or timezone not set.' });
+    }
+    const timezone = cafe.timezone; // e.g., 'Asia/Jakarta' 'Pacific/Kiritimati'
+
+    // Determine the date range based on the type relative to the cafe's timezone
+    let startDate, endDate, previousStartDate, previousEndDate;
+
+    const today = moment.tz(timezone); // Get the current time in cafe's timezone
+    const startOfDay = today.clone().startOf('day'); // 00:00:00 in cafe's timezone
+
+    // Convert both to UTC
+    const todayUTC = today.clone().utc(); // Convert the current time to UTC
+    const startOfDayUTC = startOfDay.clone().utc(); // Convert the start of the day to UTC
+
+    console.log('Today (Local):', today.format());
+    console.log('Start of Day (Local):', startOfDay.format());
+    console.log('Today (UTC):', todayUTC.format());
+    console.log('Start of Day (UTC):', startOfDayUTC.format());
+
+    // Switch based on the type of report
+    switch (type) {
+      case "yesterday":
+        startDate = startOfDayUTC.clone().subtract(1, "days").subtract(1, 'hours');
+        endDate = startOfDayUTC.clone().add(1, 'hours');
+        previousStartDate = startOfDayUTC.clone().subtract(1, "days").subtract(1, 'hours');
+        previousEndDate = startOfDayUTC.clone().subtract(1, "days").add(1, 'hours');
+        break;
+
+      case "weekly":
+        startDate = startOfDay.clone().subtract(7, "days").endOf("day").subtract(1, 'hours');;
+        endDate = startOfDay.clone().subtract(1, "days").endOf("day").add(1, 'hours');
+        previousStartDate = startOfDay.clone().subtract(14, "days").endOf("day").subtract(1, 'hours');;
+        previousEndDate = startOfDay.clone().subtract(8, "days").endOf("day");
+        break;
+
+      case "monthly":
+        startDate = startOfDay.clone().startOf("month").add(1, 'hours');;
+        endDate = startOfDay.clone().endOf("month");
+        previousStartDate = startOfDay.clone().subtract(1, "month").startOf("month").add(1, 'hours');
+        previousEndDate = startOfDay.clone().subtract(1, "month").endOf("month");
+        break;
+
+      case "yearly":
+        startDate = startOfDay.clone().startOf("year").add(1, 'hours');;
+        endDate = startOfDay.clone().endOf("year");
+        previousStartDate = startOfDay.clone().subtract(1, "year").startOf("year").add(1, 'hours');
+        previousEndDate = startOfDay.clone().subtract(1, "year").endOf("year");
+        break;
+
+      default:
+        return res.status(400).json({ error: 'Invalid report type.' });
+    }
+
+    // Fetch reports for the current and previous periods
+    const currentReports = await DailyReport.findAll({
+      where: {
+        cafeId,
+        date: { [Op.gte]: startDate.toDate(), [Op.lt]: endDate.toDate() },
+      },
+    });
+
+    const previousReports = await DailyReport.findAll({
+      where: {
+        cafeId,
+        date: { [Op.gte]: previousStartDate.toDate(), [Op.lt]: previousEndDate.toDate() },
+      },
+    });
+
+    // Helper to calculate totals
+    const calculateTotals = (reports) => {
+      return reports.reduce(
+        (totals, report) => {
+          totals.income += report.totalIncome;
+          totals.outcome += report.totalOutcome;
+          totals.transactions += report.totalTransactions;
+          return totals;
+        },
+        { income: 0, outcome: 0, transactions: 0 }
+      );
+    };
+
+    const currentReports2 = type === 'yesterday' ? currentReports.slice(0, 1) : currentReports;
+
+    const currentTotals = calculateTotals(currentReports2);
+    const previousTotals = calculateTotals(previousReports);
+
+    // Calculate growth percentages
+    const calculateGrowth = (current, previous) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return ((current - previous) / previous) * 100;
+    };
+
+    const incomeGrowth = calculateGrowth(currentTotals.income, previousTotals.income);
+    const outcomeGrowth = calculateGrowth(currentTotals.outcome, previousTotals.outcome);
+    const transactionGrowth = calculateGrowth(currentTotals.transactions, previousTotals.transactions);
+
+    // Aggregate sold items
+    const soldItems = {};
+    let totalSoldItems = 0;
+
+    currentReports2.forEach(report => {
+      for (let i = 0; i <= 23; i++) {
+        const hourTransactions = report[`hour${i}To${i + 3}Transactions`]; // e.g. hour0To3Transactions
+        if (hourTransactions && hourTransactions.length > 0) {
+          hourTransactions.forEach(transaction => {
+            const { itemId, sold, itemName } = transaction;
+            if (!soldItems[itemId]) {
+              soldItems[itemId] = { sold: 0, itemName };
+            }
+            soldItems[itemId].sold += sold;
+            soldItems[itemId].itemName = itemName;
+            totalSoldItems += sold;
+          });
+        }
+      }
+    });
+
+    const itemPercentage = Object.keys(soldItems).map(itemId => {
+      const itemData = soldItems[itemId];
+      const percentage = ((itemData.sold / totalSoldItems) * 100).toFixed(2);
+      return {
+        itemId: Number(itemId),
+        sold: itemData.sold,
+        itemName: itemData.itemName || '',
+        percentage,
+      };
+    }).sort((a, b) => b.sold - a.sold); // Sort by 'sold' in descending order
+
+    // Aggregation for monthly (by weeks)
+    const aggregateByWeeks = (reports) => {
+      const weeks = [];
+      let currentWeekStart = moment(startDate).startOf('week');
+      let currentWeekEnd = currentWeekStart.clone().endOf('week');
+
+      // Ensure there's always a week entry for each period, even if no data is present
+      while (currentWeekStart.isBefore(endDate)) {
+        const weekData = reports.filter(report => {
+          const reportDate = moment(report.date);
+          return reportDate.isBetween(currentWeekStart, currentWeekEnd, null, '[)');
+        });
+
+        weeks.push({
+          dateRange: {
+            start: currentWeekStart.format('YYYY-MM-DD'),
+            end: currentWeekEnd.format('YYYY-MM-DD')
+          },
+          income: weekData.reduce((sum, report) => sum + report.totalIncome, 0),
+          outcome: weekData.reduce((sum, report) => sum + report.totalOutcome, 0),
+          transactions: weekData.reduce((sum, report) => sum + report.totalTransactions, 0),
+          itemSales: []
+        });
+
+        currentWeekStart = currentWeekStart.clone().add(1, 'week');
+        currentWeekEnd = currentWeekStart.clone().endOf('week');
+      }
+
+      return weeks;
+    };
+
+    // Aggregation for yearly (by months)
+    const aggregateByMonths = (reports) => {
+      const months = [];
+      let currentMonthStart = moment(startDate).startOf('month');
+      let currentMonthEnd = currentMonthStart.clone().endOf('month');
+
+      // Ensure there's always a month entry for each period, even if no data is present
+      while (currentMonthStart.isBefore(endDate)) {
+        const monthData = reports.filter(report => {
+          const reportDate = moment(report.date);
+          return reportDate.isBetween(currentMonthStart, currentMonthEnd, null, '[)');
+        });
+
+        months.push({
+          dateRange: {
+            start: currentMonthStart.format('YYYY-MM-DD'),
+            end: currentMonthEnd.format('YYYY-MM-DD')
+          },
+          income: monthData.reduce((sum, report) => sum + report.totalIncome, 0),
+          outcome: monthData.reduce((sum, report) => sum + report.totalOutcome, 0),
+          transactions: monthData.reduce((sum, report) => sum + report.totalTransactions, 0),
+          itemSales: []
+        });
+
+        currentMonthStart = currentMonthStart.clone().add(1, 'month');
+        currentMonthEnd = currentMonthStart.clone().endOf('month');
+      }
+
+      return months;
+    };
+
+    // Handle monthly and yearly aggregation
+    let aggregatedReports;
+    if (type === "monthly") {
+      aggregatedReports = aggregateByWeeks(currentReports);
+    } else if (type === "yearly") {
+      aggregatedReports = aggregateByMonths(currentReports);
+    }
+
+    // Prepare the report
+    const report = {
+      type,
+      dateRange: { today, startDate, endDate, previousStartDate, previousEndDate },
+      currentTotals,
+      previousTotals,
+      growth: {
+        incomeGrowth,
+        outcomeGrowth,
+        transactionGrowth,
+      },
+      transactionGraph: currentReports.map((r) => ({
+        date: r.date,
+        hour0To3Transactions: r.hour0To3Transactions,
+        hour3To6Transactions: r.hour3To6Transactions,
+        hour6To9Transactions: r.hour6To9Transactions,
+        hour9To12Transactions: r.hour9To12Transactions,
+        hour12To15Transactions: r.hour12To15Transactions,
+        hour15To18Transactions: r.hour15To18Transactions,
+        hour18To21Transactions: r.hour18To21Transactions,
+        hour21To24Transactions: r.hour21To24Transactions,
+      })),
+      materialGraph: currentReports.map((r) => ({
+        date: r.date,
+        hour0To3MaterialIds: r.hour0To3MaterialIds,
+        hour3To6MaterialIds: r.hour3To6MaterialIds,
+        hour6To9MaterialIds: r.hour6To9MaterialIds,
+        hour9To12MaterialIds: r.hour9To12MaterialIds,
+        hour12To15MaterialIds: r.hour12To15MaterialIds,
+        hour15To18MaterialIds: r.hour15To18MaterialIds,
+        hour18To21MaterialIds: r.hour18To21MaterialIds,
+        hour21To24MaterialIds: r.hour21To24MaterialIds,
+      })),
+      itemSales: itemPercentage, // Add item sales data here
+      aggregatedReports, // Add aggregated reports for monthly or yearly
+    };
+
+    // Send the response
+    res.json(report);
+  } catch (error) {
+    console.error('Error fetching report:', error);
+    res.status(500).json({ error: 'An error occurred while fetching the report.' });
+  }
+};
+
+
+// exports.getReport = async (req, res) => {
+//   try {
+//     const { cafeId } = req.params;
+//     const { type } = req.query; // "yesterday", "weekly", "monthly", "yearly"
+
+//     // Fetch cafe's timezone (ensure this data exists in your database)
+//     const cafe = await Cafe.findByPk(cafeId);
+//     if (!cafe || !cafe.timezone) {
+//       return res.status(404).json({ error: 'Cafe not found or timezone not set.' });
+//     }
+//     const timezone = cafe.timezone; // e.g., 'Asia/Jakarta' 'Pacific/Kiritimati'
+
+//     // Determine the date range based on the type relative to the cafe's timezone
+//     let startDate, endDate, previousStartDate, previousEndDate;
+
+//     const today = moment.tz(timezone); // Get the current time in cafe's timezone
+//     // Adjust the time for the start of the day in the cafe's timezone
+//     const startOfDay = today.clone().startOf('day'); // 00:00:00 in cafe's timezone
+
+//     // Switch based on the type of report
+//     switch (type) {
+//       case "yesterday":
+//         startDate = startOfDay.clone().subtract(1, "days");
+//         endDate = startOfDay.clone().subtract(1, "days").endOf("day");
+//         previousStartDate = startOfDay.clone().subtract(2, "days");
+//         previousEndDate = startOfDay.clone().subtract(2, "days").endOf("day");
+//         break;
+
+//       case "weekly":
+//         startDate = startOfDay.clone().subtract(7, "days");
+//         endDate = startOfDay.clone().subtract(1, "days").endOf("day");
+//         previousStartDate = startOfDay.clone().subtract(14, "days");
+//         previousEndDate = startOfDay.clone().subtract(8, "days").endOf("day");
+//         break;
+
+//       case "monthly":
+//         startDate = startOfDay.clone().subtract(30, "days");
+//         endDate = startOfDay.clone().subtract(1, "days").endOf("day");
+//         previousStartDate = startOfDay.clone().subtract(60, "days");
+//         previousEndDate = startOfDay.clone().subtract(31, "days").endOf("day");
+//         break;
+
+//       case "yearly":
+//         startDate = startOfDay.clone().subtract(365, "days");
+//         endDate = startOfDay.clone().subtract(1, "days").endOf("day");
+//         previousStartDate = startOfDay.clone().subtract(730, "days");
+//         previousEndDate = startOfDay.clone().subtract(366, "days").endOf("day");
+//         break;
+
+//       default:
+//         return res.status(400).json({ error: 'Invalid report type.' });
+//     }
+
+//     // Fetch reports for the current and previous periods
+//     const currentReports = await DailyReport.findAll({
+//       where: {
+//         cafeId,
+//         date: { [Op.gte]: startDate.toDate(), [Op.lt]: endDate.toDate() },
+//       },
+//     });
+
+//     const previousReports = await DailyReport.findAll({
+//       where: {
+//         cafeId,
+//         date: { [Op.gte]: previousStartDate.toDate(), [Op.lt]: previousEndDate.toDate() },
+//       },
+//     });
+
+//     // Helper to calculate totals
+//     const calculateTotals = (reports) => {
+//       return reports.reduce(
+//         (totals, report) => {
+//           totals.income += report.totalIncome;
+//           totals.outcome += report.totalOutcome;
+//           totals.transactions += report.totalTransactions;
+//           return totals;
+//         },
+//         { income: 0, outcome: 0, transactions: 0 }
+//       );
+//     };
+
+//     const currentTotals = calculateTotals(currentReports);
+//     const previousTotals = calculateTotals(previousReports);
+
+//     // Calculate growth percentages
+//     const calculateGrowth = (current, previous) => {
+//       if (previous === 0) return current > 0 ? 100 : 0;
+//       return ((current - previous) / previous) * 100;
+//     };
+
+//     const incomeGrowth = calculateGrowth(currentTotals.income, previousTotals.income);
+//     const outcomeGrowth = calculateGrowth(currentTotals.outcome, previousTotals.outcome);
+//     const transactionGrowth = calculateGrowth(currentTotals.transactions, previousTotals.transactions);
+
+//     // Aggregate sold items
+//     const soldItems = {};
+//     let totalSoldItems = 0;
+
+//     currentReports.forEach(report => {
+//       // Loop through all hourly transactions for each report
+//       for (let i = 0; i <= 23; i++) {
+//         const hourTransactions = report[hour${i}To${i+3}Transactions]; // e.g. hour0To3Transactions
+//         if (hourTransactions && hourTransactions.length > 0) {
+//           hourTransactions.forEach(transaction => {
+//             const { itemId, sold, itemName } = transaction;
+//             console.log(transaction)
+//             if (!soldItems[itemId]) {
+//               soldItems[itemId] = { sold: 0, name: itemName };
+//             }
+//             soldItems[itemId].sold += sold;
+//             soldItems[itemId].name = itemName;
+//             totalSoldItems += sold;
+//           });
+//         }
+//       }
+//     });
+
+//     // Calculate percentage for each sold item
+//     const itemPercentage = Object.keys(soldItems).map(itemId => {
+//       const itemData = soldItems[itemId];
+//       const percentage = ((itemData.sold / totalSoldItems) * 100).toFixed(2);
+//       return {
+//         itemId: Number(itemId),
+//         sold: itemData.sold,
+//         name: itemData.name || '',
+//         percentage,
+//       };
+//     }).sort((a, b) => b.sold - a.sold); // Sort by 'sold' in descending order   
+
+//     // Prepare the report
+//     const report = {
+//       type,
+//       dateRange: { startDate, endDate },
+//       currentTotals,
+//       previousTotals,
+//       growth: {
+//         incomeGrowth,
+//         outcomeGrowth,
+//         transactionGrowth,
+//       },
+//       transactionGraph: currentReports.map((r) => ({
+//         date: r.date,
+//         hour0To3Transactions: r.hour0To3Transactions,
+//         hour3To6Transactions: r.hour3To6Transactions,
+//         hour6To9Transactions: r.hour6To9Transactions,
+//         hour9To12Transactions: r.hour9To12Transactions,
+//         hour12To15Transactions: r.hour12To15Transactions,
+//         hour15To18Transactions: r.hour15To18Transactions,
+//         hour18To21Transactions: r.hour18To21Transactions,
+//         hour21To24Transactions: r.hour21To24Transactions,
+//       })),
+//       materialGraph: currentReports.map((r) => ({
+//         date: r.date,
+//         hour0To3MaterialIds: r.hour0To3MaterialIds,
+//         hour3To6MaterialIds: r.hour3To6MaterialIds,
+//         hour6To9MaterialIds: r.hour6To9MaterialIds,
+//         hour9To12MaterialIds: r.hour9To12MaterialIds,
+//         hour12To15MaterialIds: r.hour12To15MaterialIds,
+//         hour15To18MaterialIds: r.hour15To18MaterialIds,
+//         hour18To21MaterialIds: r.hour18To21MaterialIds,
+//         hour21To24MaterialIds: r.hour21To24MaterialIds,
+//       })),
+//       itemSales: itemPercentage, // Add item sales data here
+//     };
+
+//     // Send the response
+//     res.json(report);
+//   } catch (error) {
+//     console.error('Error fetching report:', error);
+//     res.status(500).json({ error: 'An error occurred while fetching the report.' });
+//   }
+// };
+
+exports.getReport3 = async (req, res) => {
   console.log('getting report')
   const { cafeId } = req.params;
   const { type } = req.query; // "daily", "weekly", "monthly", "yearly"
@@ -1979,22 +2417,30 @@ exports.getAnalytics = async (req, res) => {
 
       let totalIncome = 0; // Initialize total income counter
       let totalOutcome = 0; // Initialize total income counter
+      try {
+        // Step 3: Process each cafe
+        for (const cafe of cafes) {
+          try {
+            // Fetching the report for each cafe
+            const report = await getReportt(cafe.dataValues.cafeId, "monthly", true);
+            cafe.dataValues.report = report; // Add the report to the cafe object
 
-      // Step 3: Process each cafe
-      for (const cafe of cafes) {
-        // Fetching the report for each cafe
-        const report = await getReportt(cafe.dataValues.cafeId, "monthly", true);
-        cafe.dataValues.report = report; // Add the report to the cafe object
+            // Calculate the total income and add it to the running total
+            totalIncome += report.totalIncome;
+            totalOutcome += report.currentOutcome;
+          }
+          catch {
 
-        // Calculate the total income and add it to the running total
-        totalIncome += report.totalIncome;
-        totalOutcome += report.currentOutcome;
+          }
+          // Fetching the clerks for each cafe
+          const clerks = await User.findAll({
+            where: { cafeId: cafe.dataValues.cafeId },
+          });
+          cafe.dataValues.subItems = clerks; // Add the clerks to the cafe object
+        }
+      }
+      catch {
 
-        // Fetching the clerks for each cafe
-        const clerks = await User.findAll({
-          where: { cafeId: cafe.dataValues.cafeId },
-        });
-        cafe.dataValues.subItems = clerks; // Add the clerks to the cafe object
       }
 
       // Step 4: Log and return the response

@@ -8,7 +8,7 @@ const { checkCafeOwnership } = require("../middlewares/checkCafeOwnership");
 // All of it are endpoint for each cafe
 router.post(
   "/fromClerk/:cafeId",
-  auth([2]),
+  auth([1,2]),
   transactionController.transactionFromClerk
 );
 router.get(

@@ -2015,21 +2015,23 @@ exports.getReport = async (req, res) => {
       default:
         return res.status(400).json({ error: 'Invalid report type.' });
     }
+// Fetch reports for the current period
+const currentReports = await DailyReport.findAll({
+  where: {
+    cafeId,
+    date: { [Op.gte]: startDate.toDate(), [Op.lt]: endDate.toDate() },
+  },
+  order: [['date', 'ASC']], // Order by date in ascending order
+});
 
-    // Fetch reports for the current and previous periods
-    const currentReports = await DailyReport.findAll({
-      where: {
-        cafeId,
-        date: { [Op.gte]: startDate.toDate(), [Op.lt]: endDate.toDate() },
-      },
-    });
-
-    const previousReports = await DailyReport.findAll({
-      where: {
-        cafeId,
-        date: { [Op.gte]: previousStartDate.toDate(), [Op.lt]: previousEndDate.toDate() },
-      },
-    });
+// Fetch reports for the previous period
+const previousReports = await DailyReport.findAll({
+  where: {
+    cafeId,
+    date: { [Op.gte]: previousStartDate.toDate(), [Op.lt]: previousEndDate.toDate() },
+  },
+  order: [['date', 'ASC']], // Order by date in ascending order
+});
 
     // Helper to calculate totals
     const calculateTotals = (reports) => {
@@ -2043,8 +2045,17 @@ exports.getReport = async (req, res) => {
         { income: 0, outcome: 0, transactions: 0 }
       );
     };
+    
+    console.log(currentReports)
+    let sortedReports = [...currentReports];
+    // Sort by date (ascending order - oldest first)
+    sortedReports = sortedReports.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    const currentReports2 = type === 'yesterday' ? currentReports.slice(0, 1) : currentReports;
+    // Remove the oldest report (first element)
+    sortedReports.shift();
+
+    const currentReports2 = type === 'yesterday' ? sortedReports : currentReports;
+    console.log(currentReports)
 
     const currentTotals = calculateTotals(currentReports2);
     const previousTotals = calculateTotals(previousReports);

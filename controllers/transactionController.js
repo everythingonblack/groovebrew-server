@@ -1955,6 +1955,10 @@ async function getReportt(cafeId, filter, getAll = true) {
   };
 };
 
+
+
+
+
 exports.getReport = async (req, res) => {
   try {
     const { cafeId } = req.params;
@@ -1992,21 +1996,21 @@ exports.getReport = async (req, res) => {
         break;
 
       case "weekly":
-        startDate = startOfDay.clone().subtract(7, "days").endOf("day").subtract(1, 'hours');;
+        startDate = startOfDay.clone().subtract(7, "days").endOf("day").subtract(1, 'hours');
         endDate = startOfDay.clone().subtract(1, "days").endOf("day").add(1, 'hours');
-        previousStartDate = startOfDay.clone().subtract(14, "days").endOf("day").subtract(1, 'hours');;
+        previousStartDate = startOfDay.clone().subtract(14, "days").endOf("day").subtract(1, 'hours');
         previousEndDate = startOfDay.clone().subtract(8, "days").endOf("day");
         break;
 
       case "monthly":
-        startDate = startOfDay.clone().startOf("month").add(1, 'hours');;
+        startDate = startOfDay.clone().startOf("month").add(1, 'hours');
         endDate = startOfDay.clone().endOf("month");
         previousStartDate = startOfDay.clone().subtract(1, "month").startOf("month").add(1, 'hours');
         previousEndDate = startOfDay.clone().subtract(1, "month").endOf("month");
         break;
 
       case "yearly":
-        startDate = startOfDay.clone().startOf("year").add(1, 'hours');;
+        startDate = startOfDay.clone().startOf("year").add(1, 'hours');
         endDate = startOfDay.clone().endOf("year");
         previousStartDate = startOfDay.clone().subtract(1, "year").startOf("year").add(1, 'hours');
         previousEndDate = startOfDay.clone().subtract(1, "year").endOf("year");
@@ -2015,23 +2019,24 @@ exports.getReport = async (req, res) => {
       default:
         return res.status(400).json({ error: 'Invalid report type.' });
     }
-// Fetch reports for the current period
-const currentReports = await DailyReport.findAll({
-  where: {
-    cafeId,
-    date: { [Op.gte]: startDate.toDate(), [Op.lt]: endDate.toDate() },
-  },
-  order: [['date', 'ASC']], // Order by date in ascending order
-});
 
-// Fetch reports for the previous period
-const previousReports = await DailyReport.findAll({
-  where: {
-    cafeId,
-    date: { [Op.gte]: previousStartDate.toDate(), [Op.lt]: previousEndDate.toDate() },
-  },
-  order: [['date', 'ASC']], // Order by date in ascending order
-});
+    // Fetch reports for the current period
+    const currentReports = await DailyReport.findAll({
+      where: {
+        cafeId,
+        date: { [Op.gte]: startDate.toDate(), [Op.lt]: endDate.toDate() },
+      },
+      order: [['date', 'ASC']], // Order by date in ascending order
+    });
+
+    // Fetch reports for the previous period
+    const previousReports = await DailyReport.findAll({
+      where: {
+        cafeId,
+        date: { [Op.gte]: previousStartDate.toDate(), [Op.lt]: previousEndDate.toDate() },
+      },
+      order: [['date', 'ASC']], // Order by date in ascending order
+    });
 
     // Helper to calculate totals
     const calculateTotals = (reports) => {
@@ -2045,7 +2050,7 @@ const previousReports = await DailyReport.findAll({
         { income: 0, outcome: 0, transactions: 0 }
       );
     };
-    
+
     console.log(currentReports)
     let sortedReports = [...currentReports];
     // Sort by date (ascending order - oldest first)
@@ -2102,74 +2107,84 @@ const previousReports = await DailyReport.findAll({
       };
     }).sort((a, b) => b.sold - a.sold); // Sort by 'sold' in descending order
 
-    // Aggregation for monthly (by weeks)
-    const aggregateByWeeks = (reports) => {
-      const weeks = [];
-      let currentWeekStart = moment(startDate).startOf('week');
-      let currentWeekEnd = currentWeekStart.clone().endOf('week');
 
-      // Ensure there's always a week entry for each period, even if no data is present
-      while (currentWeekStart.isBefore(endDate)) {
-        const weekData = reports.filter(report => {
+    // Aggregation for yearly (by quarters)
+    const aggregateByQuarters = (reports, startDate, endDate) => {
+      const quarters = [];
+      let currentQuarterStart = moment(startDate).startOf('quarter');
+      let currentQuarterEnd = currentQuarterStart.clone().endOf('quarter');
+
+      while (currentQuarterStart.isBefore(endDate)) {
+        const quarterData = reports.filter(report => {
           const reportDate = moment(report.date);
-          return reportDate.isBetween(currentWeekStart, currentWeekEnd, null, '[)');
+          return reportDate.isBetween(currentQuarterStart, currentQuarterEnd, null, '[)');
         });
 
-        weeks.push({
+        quarters.push({
           dateRange: {
-            start: currentWeekStart.format('YYYY-MM-DD'),
-            end: currentWeekEnd.format('YYYY-MM-DD')
+            start: currentQuarterStart.format('YYYY-MM-DD'),
+            end: currentQuarterEnd.format('YYYY-MM-DD')
           },
-          income: weekData.reduce((sum, report) => sum + report.totalIncome, 0),
-          outcome: weekData.reduce((sum, report) => sum + report.totalOutcome, 0),
-          transactions: weekData.reduce((sum, report) => sum + report.totalTransactions, 0),
-          itemSales: []
+          income: quarterData.reduce((sum, report) => sum + report.totalIncome, 0),
+          outcome: quarterData.reduce((sum, report) => sum + report.totalOutcome, 0),
+          transactions: quarterData.reduce((sum, report) => sum + report.totalTransactions, 0),
         });
 
-        currentWeekStart = currentWeekStart.clone().add(1, 'week');
-        currentWeekEnd = currentWeekStart.clone().endOf('week');
+        currentQuarterStart = currentQuarterStart.clone().add(1, 'quarter');
+        currentQuarterEnd = currentQuarterStart.clone().endOf('quarter');
       }
 
-      return weeks;
+      return quarters;
     };
+    // Aggregation for monthly (by periods of 7 days)
+    const aggregateByPeriods = (reports, startDate, endDate) => {
+      const periods = [];
+      let currentPeriodStart = moment(startDate).startOf('month');
+      let currentPeriodEnd = currentPeriodStart.clone().add(6, 'days'); // Each period lasts 7 days
 
-    // Aggregation for yearly (by months)
-    const aggregateByMonths = (reports) => {
-      const months = [];
-      let currentMonthStart = moment(startDate).startOf('month');
-      let currentMonthEnd = currentMonthStart.clone().endOf('month');
+      while (currentPeriodStart.isBefore(endDate)) {
+        // Ensure the period doesn't exceed the month's end
+        if (currentPeriodEnd.isAfter(endDate)) {
+          currentPeriodEnd = endDate;
+        }
 
-      // Ensure there's always a month entry for each period, even if no data is present
-      while (currentMonthStart.isBefore(endDate)) {
-        const monthData = reports.filter(report => {
+        const periodData = reports.filter(report => {
           const reportDate = moment(report.date);
-          return reportDate.isBetween(currentMonthStart, currentMonthEnd, null, '[)');
+          return reportDate.isBetween(currentPeriodStart, currentPeriodEnd, null, '[)');
         });
 
-        months.push({
+        periods.push({
           dateRange: {
-            start: currentMonthStart.format('YYYY-MM-DD'),
-            end: currentMonthEnd.format('YYYY-MM-DD')
+            start: currentPeriodStart.format('YYYY-MM-DD'),
+            end: currentPeriodEnd.format('YYYY-MM-DD')
           },
-          income: monthData.reduce((sum, report) => sum + report.totalIncome, 0),
-          outcome: monthData.reduce((sum, report) => sum + report.totalOutcome, 0),
-          transactions: monthData.reduce((sum, report) => sum + report.totalTransactions, 0),
-          itemSales: []
+          income: periodData.reduce((sum, report) => sum + report.totalIncome, 0),
+          outcome: periodData.reduce((sum, report) => sum + report.totalOutcome, 0),
+          transactions: periodData.reduce((sum, report) => sum + report.totalTransactions, 0),
         });
 
-        currentMonthStart = currentMonthStart.clone().add(1, 'month');
-        currentMonthEnd = currentMonthStart.clone().endOf('month');
+        // Move to the next period
+        currentPeriodStart = currentPeriodStart.clone().add(7, 'days');
+        currentPeriodEnd = currentPeriodStart.clone().add(6, 'days');
       }
 
-      return months;
+      return periods;
     };
 
-    // Handle monthly and yearly aggregation
-    let aggregatedReports;
+    // Modify the report generation to ensure proper aggregation
+    let aggregatedCurrentReports, aggregatedPreviousReports;
     if (type === "monthly") {
-      aggregatedReports = aggregateByWeeks(currentReports);
+
+      aggregatedCurrentReports = aggregateByPeriods(currentReports, startDate, endDate);
+      // Aggregation for the previous month
+      aggregatedPreviousReports = aggregateByPeriods(previousReports, previousStartDate, previousEndDate);
+
     } else if (type === "yearly") {
-      aggregatedReports = aggregateByMonths(currentReports);
+      // Adjust for previous year aggregation
+      const previousYearStartDate = startOfDay.clone().subtract(1, 'year').startOf('year').add(1, 'hours');
+      const previousYearEndDate = startOfDay.clone().subtract(1, 'year').endOf('year');
+      aggregatedCurrentReports = aggregateByQuarters(currentReports, startDate, endDate);
+      aggregatedPreviousReports = aggregateByQuarters(previousReports, previousYearStartDate, previousYearEndDate);
     }
 
     // Prepare the report
@@ -2206,16 +2221,18 @@ const previousReports = await DailyReport.findAll({
         hour21To24MaterialIds: r.hour21To24MaterialIds,
       })),
       itemSales: itemPercentage, // Add item sales data here
-      aggregatedReports, // Add aggregated reports for monthly or yearly
+      aggregatedCurrentReports,  // Current aggregation (monthly or yearly)
+      aggregatedPreviousReports,  // Previous aggregation (monthly or yearly)
     };
 
-    // Send the response
-    res.json(report);
-  } catch (error) {
-    console.error('Error fetching report:', error);
-    res.status(500).json({ error: 'An error occurred while fetching the report.' });
+    return res.status(200).json(report);
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to generate report.' });
   }
 };
+
 
 
 // exports.getReport = async (req, res) => {

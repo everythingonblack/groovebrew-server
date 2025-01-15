@@ -19,6 +19,7 @@ exports.createMaterialMutation = async (req, res) => {
       where: { materialId },
       order: [["changeDate", "DESC"]], // Assuming changeDate determines the order of mutations
     });
+    if(latestMutation && latestMutation.newStock == newStock && latestMutation.priceAtp != priceAtp) return res.status(409).json({ error: "no difference" });
 
     const oldStock = latestMutation ? latestMutation.newStock : 0; // Default to 0 if no previous mutation
 

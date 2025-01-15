@@ -675,20 +675,21 @@ class SpotifyService {
     try {
       const room = this.rooms[roomId] || { queue: [] };
       if (!room.queue) return [];
-
-      const detailedQueue = [];
-      for (let [track, agree, disagree, set, bePlayed] of room.queue) {
-        detailedQueue.push({
-          ...track,
-          agree: agree.length,
-          disagree: disagree.length,
-          set: set,
-          bePlayed: bePlayed,
-        });
-      }
-      return detailedQueue;
+console.log(JSON.stringify(room.queue))
+      // const detailedQueue = [];
+      // for (let [track, agree, disagree, set, bePlayed] of room.queue) {
+      //   detailedQueue.push({
+      //     ...track,
+      //     agree: agree.length,
+      //     disagree: disagree.length,
+      //     set: set,
+      //     bePlayed: bePlayed,
+      //   });
+      // }
+      // return detailedQueue;
+      return room.queue;
     } catch (error) {
-      // malas baca console.error('Error getting queue:', error);
+     console.error('Error getting queue:', error);
       // throw error;
     }
   }

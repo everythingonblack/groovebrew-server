@@ -163,12 +163,12 @@ io.on("connection", async (socket) => {
   socket.on("checkUserToken", async ({ token, shopId }) => {
     try {
       let cafe = null;
-      if(shopId){
-       cafe = await Cafe.findOne({
-        attributes: ['ownerId'], // Specify the ownerId attribute
-        where: { cafeId: shopId } // Use cafeId to find the record
-      });
-    }
+      if (shopId) {
+        cafe = await Cafe.findOne({
+          attributes: ['ownerId'], // Specify the ownerId attribute
+          where: { cafeId: shopId } // Use cafeId to find the record
+        });
+      }
 
       console.log(`trying to check token` + shopId);
       await authController.checkTokenSocket(socket, token, shopId, cafe?.ownerId); //im adding shopId, is for the owner to be clerk, because owner didnt have cafeId on db
@@ -185,11 +185,11 @@ io.on("connection", async (socket) => {
       socket.join(shopId);
       socket.emit("joined-room", { shopId, isSpotifyNeedLogin });
       console.log("emit to " + shopId + isSpotifyNeedLogin);
-      
+
       const queue = await spotifyService.getQueue(shopId);
-      
-      setTimeout(function() {
-        socket.emit("updateQueue", queue || []);
+
+      setTimeout(function () {
+        socket.emit("updateQueue", {queue: queue || [], getRecommendedMusic: spotifyService.rooms[shopId]?.getRecommendedMusic});
       }, 5000);
     } catch {
       console.log("error" + shopId);
@@ -308,16 +308,69 @@ io.on("connection", async (socket) => {
       if (!spotifyService.rooms[shopId]) {
         spotifyService.rooms[shopId] = { playerToken: '' };
       }
-  
+
       // Set the player token for the room
       spotifyService.rooms[shopId].playerToken = randomValue;
-
+      if (spotifyService.rooms[shopId].playerSocket) {
+        io.to(spotifyService.rooms[shopId].playerSocket).emit('claimPlayerRes', { error: "Unauthenticated" });
+      }
+      spotifyService.rooms[shopId].playerSocket = '';
       // Emit the 'claimPlayerRes' event with success response
-      return socket.emit('claimPlayerRes', { url: process.env.FRONTEND_PLAYER_URI + `/${shopId}?token=`+  randomValue });
+      return socket.emit('claimPlayerRes', { url: process.env.FRONTEND_PLAYER_URI + `/${shopId}?token=` + randomValue });
     } catch (error) {
       console.error('Error handling claimPlayer:', error);
       // Emit the 'claimPlayerRes' event with error response
       return socket.emit('claimPlayerRes', { error: "Error processing the request" });
+    }
+  });
+
+  socket.on('configPlayer', async (data) => {
+    
+    const { token, shopId, getRecommendedMusic } = data;
+
+    // Validate the token
+    if (token == "null" || token == "") {
+      // Emit the 'configPlayer' event with error response
+      return socket.emit('configPlayerRes', { error: "Unauthenticated" });
+    }
+
+    // Decode and verify the token
+    try {
+      const decoded = verifyToken(token); // Decodes the token (throws error if invalid)
+      const user = await User.findByPk(decoded.userId); // Assuming User is your Sequelize model
+      const cafe = await Cafe.findByPk(shopId); // Assuming User is your Sequelize model
+
+      // Check user role and shopId
+      if (user.roleId !== 2 && user.cafeId !== shopId && user.userId != cafe.ownerId) {
+        // Emit the 'configPlayer' event with error response
+        return socket.emit('configPlayerRes', { error: "Unauthenticated" });
+      }
+
+      // Parse existing configuration
+      let welcomePageConfig = cafe.welcomePageConfig
+        ? JSON.parse(cafe.welcomePageConfig)
+        : {};
+
+      // Update configuration
+      welcomePageConfig.getRecommendedMusic = getRecommendedMusic;
+
+      cafe.welcomePageConfig = JSON.stringify(welcomePageConfig);
+
+      await cafe.save();
+
+      spotifyService.rooms[shopId].getRecommendedMusic = getRecommendedMusic;
+      console.log(spotifyService.rooms[shopId])
+      
+      // Emit the 'configPlayer' event with success response
+      
+      socket.emit('configPlayerRes', { status: '200' });
+
+      const queue = await spotifyService.getQueue(shopId);
+      return io.to(shopId).emit("updateQueue", {queue, getRecommendedMusic: getRecommendedMusic});
+    } catch (error) {
+      console.error('Error handling claimPlayer:', error);
+      // Emit the 'configPlayer' event with error response
+      return socket.emit('configPlayerRes', { error: "Error processing the request" });
     }
   });
 
@@ -333,12 +386,20 @@ io.on("connection", async (socket) => {
 
     // Decode and verify the token
     try {
-      
+      const cafe = await Cafe.findByPk(shopId); // Assuming User is your Sequelize model
+      // Parse existing configuration
+      let welcomePageConfig = cafe.welcomePageConfig
+        ? JSON.parse(cafe.welcomePageConfig)
+        : {};
+
+      spotifyService.rooms[shopId].getRecommendedMusic = welcomePageConfig.getRecommendedMusic;
+
+      spotifyService.rooms[shopId].playerSocket = socket.id;
       socket.join(shopId);
       socket.emit('authenticated');
       const queue = await spotifyService.getQueue(shopId);
-      setTimeout(function() {
-        socket.emit("updateQueue", queue);
+      setTimeout(function () {
+        socket.emit("updateQueue", {queue, getRecommendedMusic: spotifyService.rooms[shopId].getRecommendedMusic});
       }, 5000);
     } catch (error) {
       console.error('Error handling claimPlayer:', error);
@@ -370,7 +431,7 @@ io.on("connection", async (socket) => {
       if (!spotifyService.rooms[shopId]) {
         spotifyService.rooms[shopId] = { playerToken: '' };
       }
-  
+
       // Set the player token for the room
       spotifyService.rooms[shopId].playerToken = '';
 
@@ -398,29 +459,52 @@ io.on("connection", async (socket) => {
     // Decode and verify the token
     try {
       spotifyService.rooms[shopId].queue = editedQueue;
-      io.to(shopId).emit("updateQueue", editedQueue);
+      io.to(shopId).emit("updateQueue", {queue: editedQueue, getRecommendedMusic: spotifyService.rooms[shopId].getRecommendedMusic});
     } catch (error) {
       console.error('Error handling claimPlayer:', error);
       // Emit the 'claimPlayerRes' event with error response
-      return socket.emit('claimPlayerRes', { error: "Error processing the request" });
+      // return socket.emit('claimPlayerRes', { error: "Error processing the request" });
     }
   });
-  
+
+  socket.on('updateCurrentTrack', async (data) => {
+    const { token, shopId, currentTrack } = data;
+    console.log('authenticating' + currentTrack)
+    console.log(shopId)
+    console.log(spotifyService.rooms[shopId])
+    // Validate the token
+    if (token == "null" || token == "" || spotifyService.rooms[shopId]?.playerToken != token) {
+      // Emit the 'claimPlayerRes' event with error response
+      // return socket.emit('editQueueRes', { error: "Unauthenticated" });
+      return;
+    }
+
+    // Decode and verify the token
+    try {
+      spotifyService.rooms[shopId].currentTrack = currentTrack;
+      io.to(shopId).emit("updateCurrentSong", currentTrack);
+    } catch (error) {
+      console.error('Error handling claimPlayer:', error);
+      // Emit the 'claimPlayerRes' event with error response
+      // return socket.emit('claimPlayerRes', { error: "Error processing the request" });
+    }
+  });
   socket.on("searchRequest", async (data) => {
     const { songName } = data;
     console.log("Searching for track:", songName);
     const tracks = await spotifyService.searchSongs(songName);
-    
+
     console.log(tracks)
     if (tracks.length > 0) {
-        socket.emit('searchResponse', tracks );
+      socket.emit('searchResponse', tracks);
     } else {
-        socket.emit('searchResponse', []);
+      socket.emit('searchResponse', []);
     }
   });
 
   socket.on("songRequest", async (data) => {
     const { token, shopId, track } = data;
+
     if (token) {
       const decoded = verifyToken(token);
       if (decoded) {
@@ -431,7 +515,7 @@ io.on("connection", async (socket) => {
           const queue = await spotifyService.getQueue(shopId);
           console.log("sharing queue" + track);
           console.log(queue)
-          io.to(shopId).emit("updateQueue", queue);
+          io.to(shopId).emit("updateQueue", {queue});
           console.log(shopId);
           console.log(queue);
         }
@@ -450,7 +534,7 @@ io.on("connection", async (socket) => {
 
         const queue = await spotifyService.getQueue(shopId);
         console.log(queue)
-        io.to(shopId).emit("updateQueue", queue);
+        io.to(shopId).emit("updateQueue", {queue});
       }
     }
   });
@@ -469,7 +553,124 @@ io.on("connection", async (socket) => {
       }
     }
   });
+  socket.on("getRecommendation", async (data) => {
+    const { token, shopId, currentTrack } = data;
 
+    console.log('getting recommendation', currentTrack)
+    console.log(shopId)
+    console.log(spotifyService.rooms[shopId])
+    // Validate the token
+    if (token == "null" || token == "" || spotifyService.rooms[shopId]?.playerToken != token) {
+      // Emit the 'claimPlayerRes' event with error response
+      // return socket.emit('editQueueRes', { error: "Unauthenticated" });
+      return;
+    }
+
+
+    const recommended = await fetch("https://music.youtube.com/youtubei/v1/next?prettyPrint=false", {
+      headers: {
+        "accept": "*/*",
+        "accept-language": "en-US,en;q=0.9",
+        "cache-control": "no-cache",
+        "content-type": "application/json",
+        "pragma": "no-cache",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "same-origin",
+        "sec-fetch-site": "same-origin",
+        "x-goog-visitor-id": "<your-visitor-id>",
+        "x-youtube-client-name": "67",
+        "x-youtube-client-version": "1.20241218.01.00"
+      },
+      referrer: "https://music.youtube.com/watch?v=" + currentTrack,
+      referrerPolicy: "strict-origin-when-cross-origin",
+      body: JSON.stringify({
+        enablePersistentPlaylistPanel: true,
+        tunerSettingValue: "AUTOMIX_SETTING_NORMAL",
+        playlistId: "RDAMVM" + currentTrack,
+        params: "wAEB8gECeAHqBAtEaVRkNzcxV3VtRQ%3D%3D",
+        isAudioOnly: true,
+        responsiveSignals: {
+          videoInteraction: [
+            {
+              queueImpress: {},
+              videoId: currentTrack,
+              queueIndex: 0
+            }
+          ]
+        },
+        queueContextParams: "CAEaEVJEQU1WTURpVGQ3NzFXdW1FIITB5uvG44oDMgtEaVRkNzcxV3VtRUoLRGlUZDc3MVd1bUVQAFoECAAQAQ==",
+        context: {
+          client: {
+            hl: "en",
+            gl: "ID",
+            remoteHost: "182.253.116.34",
+            deviceMake: "Apple",
+            deviceModel: "iPhone",
+            userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)",
+            clientName: "WEB_REMIX",
+            clientVersion: "1.20241218.01.00",
+            osName: "iPhone",
+            osVersion: "16_6",
+            originalUrl: "https://music.youtube.com/watch?v=" + currentTrack,
+            screenPixelDensity: 1,
+            platform: "MOBILE",
+            clientFormFactor: "UNKNOWN_FORM_FACTOR",
+            configInfo: {
+              appInstallData: "<app-install-data>"
+            }
+          },
+          user: {
+            lockedSafetyMode: false
+          }
+        },
+        request: {
+          useSsl: true,
+          consistencyTokenJars: [
+            {
+              encryptedTokenJarContents: "<your-encrypted-token-contents>"
+            }
+          ],
+          internalExperimentFlags: []
+        },
+        clickTracking: {
+          clickTrackingParams: "CBoQ_20iEwiRpeXrxuOKAxUiv0sFHawvFXc="
+        },
+        adSignalsInfo: {
+          params: [
+            { key: "dt", value: "1736250955353" },
+            { key: "flash", value: "0" },
+            { key: "frm", value: "0" },
+            { key: "u_tz", value: "420" },
+            { key: "u_his", value: "5" },
+            { key: "u_h", value: "1080" },
+            { key: "u_w", value: "1920" },
+            { key: "u_ah", value: "1032" },
+            { key: "u_aw", value: "1920" },
+            { key: "u_cd", value: "24" },
+            { key: "bc", value: "31" },
+            { key: "bih", value: "944" },
+            { key: "biw", value: "963" },
+            { key: "brdim", value: "3,10,3,10,1920,0,1275,1039,963,944" },
+            { key: "vis", value: "1" },
+            { key: "wgl", value: "true" },
+            { key: "ca_type", value: "image" }
+          ]
+        }
+      }),
+      method: "POST",
+      mode: "cors",
+      credentials: "include"
+    })
+      .then(response => response.json())
+      .then(data => { return data })
+      .catch(error => console.error("Error:", error));
+    const randomNumber = Math.floor(Math.random() * 4);  // Generates a random number between 0 and 3
+
+    io.to(shopId).emit("updateRecommendation", recommended?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs[0]?.tabRenderer?.content?.musicQueueRenderer?.content?.playlistPanelRenderer?.contents[randomNumber]);
+
+      
+    
+  });
   socket.on("disconnect", () => {
     console.log("Client disconnected");
     // spotifyService.removeUserBySocketId(socket.id); // Remove user from room based on socket ID
@@ -736,7 +937,7 @@ const getUtc = () => {
   // const utc = moment.utc('2025-01-05T17:00:00Z');
   const utc = moment.utc();
 
-  
+
   // Return the manipulated UTC time
   return utc;
 };

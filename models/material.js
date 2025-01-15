@@ -17,7 +17,10 @@ module.exports = (sequelize) => {
           "kuintal",
           "ons",
           "gram",
-          "meter"
+          "meter",
+          "pack",
+          "sachet",
+          "box"
         ),
         allowNull: false,
       },

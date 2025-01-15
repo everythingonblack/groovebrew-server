@@ -25,7 +25,7 @@ module.exports = (sequelize, DataTypes) => {
         },
       },
       tableNo: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.STRING,
         allowNull: true,
       },
       tableCode: {

@@ -39,6 +39,9 @@ const validateUnit = (unit) => {
     "ons",
     "gram",
     "meter",
+    "pack",
+    "sachet",
+    "box",
   ];
   return validUnits.includes(unit);
 };

@@ -44,7 +44,7 @@ exports.updateCafe = async (req, res) => {
     }
 
     const { cafeId } = req.params;
-    const { name, xposition, yposition, scale } = req.body;
+    const { name, xposition, yposition, scale, fontsize, fontcolor, fontxposition, fontyposition } = req.body;
     console.log(req.body);
 
     const qrBackground = req.files["qrBackground"]
@@ -65,6 +65,11 @@ exports.updateCafe = async (req, res) => {
         cafe.xposition = xposition != "undefined" ? xposition : cafe.xposition;
         cafe.yposition = yposition != "undefined" ? yposition : cafe.yposition;
         cafe.scale = scale != undefined ? scale : cafe.scale;
+
+        cafe.fontsize = fontsize != "undefined" ? fontsize : cafe.fontsize;
+        cafe.fontcolor = fontcolor != "undefined" ? fontcolor : cafe.fontcolor;
+        cafe.fontxposition = fontxposition != undefined ? fontxposition : cafe.fontxposition;
+        cafe.fontyposition = fontyposition != undefined ? fontyposition : cafe.fontyposition;
 
         await cafe.save();
         res.status(200).json(cafe);

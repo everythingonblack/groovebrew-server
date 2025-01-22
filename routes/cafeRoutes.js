@@ -9,6 +9,7 @@ router.post(
   auth([0, 1]),
   cafeController.getCafeByUserId
 );
+router.post("/get-cafeId/:cafeIdentifyName", cafeController.getCafeByIdentifier);
 router.post("/get-cafe/:cafeId", cafeController.getCafeById);
 router.post("/create-cafe", auth([1]), cafeController.createCafe);
 router.put(

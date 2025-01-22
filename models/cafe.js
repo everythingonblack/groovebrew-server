@@ -8,16 +8,22 @@ function generateCafeId() {
   return `${uuid.slice(0, 5)}-${uuid.slice(5, 10)}-${uuid.slice(10, 15)}`; // Return formatted string
 }
 
+
 module.exports = (sequelize, DataTypes) => {
   const Cafe = sequelize.define(
     "Cafe",
     {
       cafeId: {
-        type: DataTypes.STRING, // Change to STRING
+        type: DataTypes.STRING,
         primaryKey: true,
         allowNull: false,
         unique: true,
-        defaultValue: () => generateCafeId(), // Use custom ID generator
+        defaultValue: () => generateCafeId(),
+      },
+      cafeIdentifyName: {
+        type: DataTypes.STRING,
+        allowNull: false, // The column should not allow null values
+        unique: true, // Ensure the value is unique
       },
       name: {
         type: DataTypes.STRING,
@@ -30,11 +36,12 @@ module.exports = (sequelize, DataTypes) => {
       qrPayment: {
         type: DataTypes.STRING,
         allowNull: true,
+        defaultValue: "uploads/assets/sampelQRIS.png",
       },
       qrBackground: {
         type: DataTypes.STRING,
         allowNull: true,
-        defaultValue: "uploads/1736703782722.png",
+        defaultValue: "uploads/assets/sampelQRBackground.png",
       },
       xposition: {
         type: DataTypes.DECIMAL(10, 2),
@@ -74,24 +81,24 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: "Asia/Jakarta",
       },
       fontsize: {
-        type: DataTypes.DECIMAL(10, 2), // Decimal for precise numeric values
+        type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
-        defaultValue: 31.25, // Default value for fontsize
+        defaultValue: 31.25,
       },
       fontcolor: {
         type: DataTypes.STRING,
         allowNull: true,
-        defaultValue: "#FFFFFF", // Default value for fontfamily
+        defaultValue: "#FFFFFF",
       },
       fontxposition: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
-        defaultValue: 5.5, // Default value for fontxposition
+        defaultValue: 5.5,
       },
       fontyposition: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
-        defaultValue: 68.0, // Default value for fontyposition
+        defaultValue: 68.0,
       },
       createdAt: {
         allowNull: false,

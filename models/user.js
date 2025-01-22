@@ -51,13 +51,16 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "User",
       freezeTableName: true,
-    },
+    }
   );
 
   User.associate = function (models) {
     User.belongsTo(models.Cafe, { foreignKey: "cafeId" });
     User.belongsTo(models.Role, { foreignKey: "roleId" });
     User.hasMany(models.Session, { foreignKey: "userId" });
+
+    // A User can have many Coupons
+    User.hasMany(models.Coupon, { foreignKey: "userId", onDelete: "SET NULL" });
   };
 
   return User;

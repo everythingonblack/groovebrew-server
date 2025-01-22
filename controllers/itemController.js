@@ -299,22 +299,22 @@ exports.deleteItemType = async (req, res) => {
   }
 };
 exports.getItemTypesWithItems = async (req, res) => {
-  const { cafeId } = req.params;
+  const { cafeIdentifyName } = req.params;
 
   try {
-    const cafe = await Cafe.findByPk(cafeId);
+    const cafe = await Cafe.findOne({ where: { cafeIdentifyName } });
     if (!cafe) return res.status(404).json({ error: "Cafe not found" });
 
     let getAll = false;
     if (
       req.user &&
-      (req.user.userId === cafe.ownerId || req.user.cafeId === cafeId)
+      (req.user.userId === cafe.ownerId || req.user.cafeId === cafe.cafeId)
     ) {
       getAll = true;
     }
 
     const whereClause = {
-      cafeId,
+      cafeId: cafe.cafeId,
     };
 
     // Only add visibility if not fetching all

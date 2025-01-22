@@ -49,7 +49,7 @@ router.delete(
 
 // Combined item and type routes
 router.get(
-  "/get-cafe-items/:cafeId",
+  "/get-cafe-items/:cafeIdentifyName",
   auth([-1]),
   itemController.getItemTypesWithItems
 ); // Get all item types with their associated items for a specific cafe

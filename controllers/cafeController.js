@@ -44,7 +44,7 @@ exports.updateCafe = async (req, res) => {
     }
 
     const { cafeId } = req.params;
-    const { name, xposition, yposition, scale, fontsize, fontcolor, fontxposition, fontyposition } = req.body;
+    const { name, xposition, yposition, scale, fontsize, fontcolor, fontxposition, fontyposition, cafeIdentifyName } = req.body;
     console.log(req.body);
 
     const qrBackground = req.files["qrBackground"]
@@ -70,6 +70,8 @@ exports.updateCafe = async (req, res) => {
         cafe.fontcolor = fontcolor != "undefined" ? fontcolor : cafe.fontcolor;
         cafe.fontxposition = fontxposition != undefined ? fontxposition : cafe.fontxposition;
         cafe.fontyposition = fontyposition != undefined ? fontyposition : cafe.fontyposition;
+
+        cafe.cafeIdentifyName = cafeIdentifyName != undefined ? cafeIdentifyName : cafe.cafeIdentifyName;
 
         await cafe.save();
         res.status(200).json(cafe);
@@ -138,6 +140,10 @@ exports.updateCafeWelcomePageConfig = async (req, res) => {
   });
 };
 // Create a new cafe
+const generateRandomString = () => {
+  return Math.random().toString(36).substring(2, 6); // Generates 4 random lowercase letters
+};
+
 exports.createCafe = async (req, res) => {
   const { name } = req.body;
 
@@ -146,10 +152,53 @@ exports.createCafe = async (req, res) => {
   }
 
   try {
-    const cafe = await Cafe.create({ name, ownerId: req.user.userId });
+    // Check if a cafe with the same name already exists
+    let cafeIdentifyName = name;
+    let existingCafe = await Cafe.findOne({
+      where: { cafeIdentifyName: cafeIdentifyName },
+      attributes: ['cafeId']
+    });
+
+    // If cafe exists, append random string and check again
+    while (existingCafe) {
+      cafeIdentifyName = name + generateRandomString();
+      existingCafe = await Cafe.findOne({
+        where: { cafeIdentifyName: cafeIdentifyName },
+        attributes: ['cafeId']
+      });
+    }
+
+    // Create the new cafe with a unique cafeIdentifyName
+    const cafe = await Cafe.create({
+      name,
+      cafeIdentifyName,
+      ownerId: req.user.userId
+    });
+
     res.status(201).json(cafe);
+
   } catch (error) {
     console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Get cafe by ID
+exports.getCafeByIdentifier = async (req, res) => {
+  const { cafeIdentifyName } = req.params;
+
+  try {
+    const cafe = await Cafe.findOne({
+      where: { cafeIdentifyName },
+      attributes: ['cafeId'] // Only retrieve cafeId
+    });
+
+    if (!cafe) {
+      return res.status(404).json({ error: "Cafe not found" });
+    }
+    res.status(200).json(cafe);
+  } catch (error) {
+    console.error("Error fetching cafe:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -220,13 +269,13 @@ exports.getCafeByUserId = async (req, res) => {
     const cafes = await Cafe.findAll({
       where: { ownerId: userId },
     });
-    
+
     for (const cafe of cafes) {
       console.log(cafe)
       const report = await getReportt(cafe.dataValues.cafeId, "monthly");
       cafe.dataValues.report = report; // Add the report to the cafe object
     }
-    
+
     // Now you can log the cafes with their reports
     console.log(cafes);
     res.status(200).json(cafes);

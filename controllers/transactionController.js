@@ -1958,16 +1958,13 @@ async function getReportt(cafeId, filter, getAll = true) {
 
 
 
-
-exports.getReport = async (req, res) => {
+async function getReportFunction (cafeId, type) {
   try {
-    const { cafeId } = req.params;
-    const { type } = req.query; // "yesterday", "weekly", "monthly", "yearly"
 
     // Fetch cafe's timezone (ensure this data exists in your database)
     const cafe = await Cafe.findByPk(cafeId);
     if (!cafe || !cafe.timezone) {
-      return res.status(404).json({ error: 'Cafe not found or timezone not set.' });
+      return null;
     }
     const timezone = cafe.timezone; // e.g., 'Asia/Jakarta' 'Pacific/Kiritimati'
 
@@ -2017,7 +2014,7 @@ exports.getReport = async (req, res) => {
         break;
 
       default:
-        return res.status(400).json({ error: 'Invalid report type.' });
+        return null;
     }
 
     // Fetch reports for the current period
@@ -2225,12 +2222,22 @@ exports.getReport = async (req, res) => {
       aggregatedPreviousReports,  // Previous aggregation (monthly or yearly)
     };
 
-    return res.status(200).json(report);
+    return report;
 
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: 'Failed to generate report.' });
+    return null;
   }
+}
+
+
+exports.getReport = async (req, res) => {
+  const { cafeId } = req.params;
+  const { type } = req.query; // "yesterday", "weekly", "monthly", "yearly"
+
+  const report = await getReportFunction(cafeId, type)
+  if (report) return res.status(200).json(report);
+  else return res.status(500).json({ error: 'Failed to generate report.' });
 };
 
 
@@ -2450,12 +2457,12 @@ exports.getAnalytics = async (req, res) => {
         for (const cafe of cafes) {
           try {
             // Fetching the report for each cafe
-            const report = await getReportt(cafe.dataValues.cafeId, "monthly", true);
+            const report = await getReportFunction(cafe.dataValues.cafeId, "monthly");
             cafe.dataValues.report = report; // Add the report to the cafe object
 
             // Calculate the total income and add it to the running total
-            totalIncome += report.totalIncome;
-            totalOutcome += report.currentOutcome;
+            totalIncome += report.currentTotals.income;
+            totalOutcome += report.currentTotals.outcome;
           }
           catch {
 
@@ -2525,15 +2532,12 @@ async function getAllTenantReports(req, res) {
 
       // Step 6: Fetch reports for each cafe owned by this tenant in parallel
       const reports = await Promise.all(
-        cafes.map(cafe => getReportt(cafe.cafeId, 'monthly', false)) // Fetch report for each cafe
+        cafes.map(cafe => getReportFunction(cafe.cafeId, 'monthly')) // Fetch report for each cafe
       );
 
       // Step 7: Calculate the total income for the current tenant
       const totalIncomeForTenant = reports.reduce((sum, report) => {
-        return sum + (report?.totalIncome || 0); // Add the totalIncome for each cafe's report
-      }, 0);
-      const totalOutcomeForTenant = reports.reduce((sum, report) => {
-        return sum + (report?.currentOutcome || 0); // Add the totalIncome for each cafe's report
+        return sum + (report?.currentTotals?.income || 0); // Add the totalIncome for each cafe's report
       }, 0);
 
       // Add this tenant's total income to the overall total income
@@ -2545,7 +2549,6 @@ async function getAllTenantReports(req, res) {
         username: tenant.username,
         email: tenant.email,
         totalIncome: totalIncomeForTenant, // Add the total income for this tenant
-        totalOutcome: totalOutcomeForTenant, // Add the total income for this tenant
         subItems: cafes.map((cafe, index) => ({
           ...cafe.dataValues, // Include all cafe details
           report: reports[index] // Attach the corresponding report

@@ -27,6 +27,7 @@ const io = socketIo(server, {
         process.env.FRONTEND_URI,
         'http://localhost:3000',
         'http://localhost:3001',
+        '*',
         process.env.FRONTEND_PLAYER_URI,
       ];
       if (allowedOrigins.includes(origin) || !origin) {
@@ -49,6 +50,7 @@ const userHelper = require("./services/userHelper");
 const spotifyService = new SpotifyService();
 
 const userRoutes = require("./routes/userRoutes");
+const couponRoutes = require("./routes/couponRoutes");
 const cafeRoutes = require("./routes/cafeRoutes");
 const itemRoutes = require("./routes/itemRoutes");
 const materialRoutes = require("./routes/materialRoutes");
@@ -911,6 +913,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // });
 
 app.use("/user", userRoutes);
+app.use("/coupon", couponRoutes);
 app.use("/cafe", cafeRoutes);
 app.use("/item", itemRoutes);
 app.use("/material", materialRoutes);

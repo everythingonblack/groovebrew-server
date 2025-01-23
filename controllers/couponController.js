@@ -1,9 +1,10 @@
 const { Coupon, User } = require("../models"); 
 const bcrypt = require('bcrypt');  // For password hashing
 const { Op } = require("sequelize");
+const { generateToken } = require("../services/jwtHelper"); // Import the JWT helper
 
-function generateCouponCode(length = 6) {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; 
+function generateCouponCode(length = 7) {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&-'; 
     let couponCode = '';
     for (let i = 0; i < length; i++) {
       const randomIndex = Math.floor(Math.random() * characters.length);
@@ -57,7 +58,7 @@ exports.checkCoupon = async (req, res) => {
       },
     });
 
-    if (!coupon) {
+    if (!coupon || coupon.userId) {
       return res.status(404).json({ message: "Coupon not found or expired" });
     }
 
@@ -117,15 +118,11 @@ exports.createUserWithCoupon = async (req, res) => {
       });
     }
     
+    // Generate JWT token
+    const token = generateToken(newUser);
 
-    return res.status(201).json({
-      message: "User created successfully with coupon",
-      user: newUser,
-      coupon: {
-        code: coupon.code,
-        discountEndDate,
-      },
-    });
+    // Respond with the token and any necessary user details
+    res.status(200).json({ token });
   } catch (error) {
     console.error(error.message);
     return res.status(500).json({ message: "Internal Server Error" });

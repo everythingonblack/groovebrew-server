@@ -36,7 +36,46 @@ const upload = multer({
   { name: "cafeLogo", maxCount: 1 },
 ]);
 
-// Update cafe details
+exports.createCafe = async (req, res) => {
+  const { name } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: "Cafe name is required" });
+  }
+
+  try {
+    console.log("aaaa" + name)
+    let cafeIdentifyName = name.replace(/\s+/g, '_');  // Replace spaces with underscores
+    console.log(cafeIdentifyName + "aaaaaaaaaa")
+    let existingCafe = await Cafe.findOne({
+      where: { cafeIdentifyName: cafeIdentifyName },
+      attributes: ['cafeId']
+    });
+
+    // If cafe exists, append random string and check again
+    while (existingCafe) {
+      cafeIdentifyName = name.replace(/\s+/g, '_') + generateRandomString();  // Ensure new name is also formatted
+      existingCafe = await Cafe.findOne({
+        where: { cafeIdentifyName: cafeIdentifyName },
+        attributes: ['cafeId']
+      });
+    }
+
+    const cafe = await Cafe.create({
+      name,
+      cafeIdentifyName,
+      ownerId: req.user.userId
+    });
+
+    res.status(201).json(cafe);
+
+  } catch (error) {
+    console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+
 exports.updateCafe = async (req, res) => {
   upload(req, res, async (err) => {
     if (err) {
@@ -45,7 +84,6 @@ exports.updateCafe = async (req, res) => {
 
     const { cafeId } = req.params;
     const { name, xposition, yposition, scale, fontsize, fontcolor, fontxposition, fontyposition, cafeIdentifyName } = req.body;
-    console.log(req.body);
 
     const qrBackground = req.files["qrBackground"]
       ? req.files["qrBackground"][0].path
@@ -59,19 +97,18 @@ exports.updateCafe = async (req, res) => {
       if (cafe) {
         // Use existing data if new data is undefined
         cafe.name = name !== undefined ? name : cafe.name;
-        cafe.qrBackground =
-          qrBackground !== null ? qrBackground : cafe.qrBackground;
+        cafe.qrBackground = qrBackground !== null ? qrBackground : cafe.qrBackground;
         cafe.qrPayment = qrPayment !== null ? qrPayment : cafe.qrPayment;
-        cafe.xposition = xposition != "undefined" ? xposition : cafe.xposition;
-        cafe.yposition = yposition != "undefined" ? yposition : cafe.yposition;
-        cafe.scale = scale != undefined ? scale : cafe.scale;
+        cafe.xposition = xposition !== "undefined" ? xposition : cafe.xposition;
+        cafe.yposition = yposition !== "undefined" ? yposition : cafe.yposition;
+        cafe.scale = scale !== undefined ? scale : cafe.scale;
+        cafe.fontsize = fontsize !== "undefined" ? fontsize : cafe.fontsize;
+        cafe.fontcolor = fontcolor !== "undefined" ? fontcolor : cafe.fontcolor;
+        cafe.fontxposition = fontxposition !== undefined ? fontxposition : cafe.fontxposition;
+        cafe.fontyposition = fontyposition !== undefined ? fontyposition : cafe.fontyposition;
 
-        cafe.fontsize = fontsize != "undefined" ? fontsize : cafe.fontsize;
-        cafe.fontcolor = fontcolor != "undefined" ? fontcolor : cafe.fontcolor;
-        cafe.fontxposition = fontxposition != undefined ? fontxposition : cafe.fontxposition;
-        cafe.fontyposition = fontyposition != undefined ? fontyposition : cafe.fontyposition;
-
-        cafe.cafeIdentifyName = cafeIdentifyName != undefined ? cafeIdentifyName : cafe.cafeIdentifyName;
+        // Replace spaces in cafeIdentifyName with underscores if it's provided
+        cafe.cafeIdentifyName = cafeIdentifyName !== undefined ? cafeIdentifyName.replace(/\s+/g, '_') : cafe.cafeIdentifyName;
 
         await cafe.save();
         res.status(200).json(cafe);
@@ -84,6 +121,9 @@ exports.updateCafe = async (req, res) => {
     }
   });
 };
+
+
+
 exports.updateCafeWelcomePageConfig = async (req, res) => {
   upload(req, res, async (err) => {
     if (err) {
@@ -142,45 +182,6 @@ exports.updateCafeWelcomePageConfig = async (req, res) => {
 // Create a new cafe
 const generateRandomString = () => {
   return Math.random().toString(36).substring(2, 6); // Generates 4 random lowercase letters
-};
-
-exports.createCafe = async (req, res) => {
-  const { name } = req.body;
-
-  if (!name) {
-    return res.status(400).json({ error: "Cafe name is required" });
-  }
-
-  try {
-    // Check if a cafe with the same name already exists
-    let cafeIdentifyName = name;
-    let existingCafe = await Cafe.findOne({
-      where: { cafeIdentifyName: cafeIdentifyName },
-      attributes: ['cafeId']
-    });
-
-    // If cafe exists, append random string and check again
-    while (existingCafe) {
-      cafeIdentifyName = name + generateRandomString();
-      existingCafe = await Cafe.findOne({
-        where: { cafeIdentifyName: cafeIdentifyName },
-        attributes: ['cafeId']
-      });
-    }
-
-    // Create the new cafe with a unique cafeIdentifyName
-    const cafe = await Cafe.create({
-      name,
-      cafeIdentifyName,
-      ownerId: req.user.userId
-    });
-
-    res.status(201).json(cafe);
-
-  } catch (error) {
-    console.error("Error creating cafe:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
 };
 
 // Get cafe by ID

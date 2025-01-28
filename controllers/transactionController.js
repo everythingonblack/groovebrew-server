@@ -616,7 +616,7 @@ exports.getTransactions = async (req, res) => {
 
   const cafe = await Cafe.findByPk(cafeId);
 
-  if (req.user.cafeId != cafeId && req.user.userId != cafe.ownerId) {
+  if (!cafe || req.user.cafeId != cafeId && req.user.userId != cafe.ownerId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -1958,7 +1958,7 @@ async function getReportt(cafeId, filter, getAll = true) {
 
 
 
-async function getReportFunction (cafeId, type) {
+async function getReportFunction(cafeId, type) {
   try {
 
     // Fetch cafe's timezone (ensure this data exists in your database)
@@ -2196,7 +2196,7 @@ async function getReportFunction (cafeId, type) {
         transactionGrowth,
       },
       transactionGraph: currentReports.map((r) => ({
-        date: r.date,
+        date: moment(r.date).format("YYYY-MM-DD"),
         hour0To3Transactions: r.hour0To3Transactions,
         hour3To6Transactions: r.hour3To6Transactions,
         hour6To9Transactions: r.hour6To9Transactions,
@@ -2207,7 +2207,7 @@ async function getReportFunction (cafeId, type) {
         hour21To24Transactions: r.hour21To24Transactions,
       })),
       materialGraph: currentReports.map((r) => ({
-        date: r.date,
+        date: moment(r.date).format("YYYY-MM-DD"),
         hour0To3MaterialIds: r.hour0To3MaterialIds,
         hour3To6MaterialIds: r.hour3To6MaterialIds,
         hour6To9MaterialIds: r.hour6To9MaterialIds,
@@ -2439,8 +2439,16 @@ exports.getReportt = async (cafeId, filter) => {
   return report;
 }
 
+// Helper function to calculate growth percentage
+function calculateGrowth(currentValue, previousValue) {
+  if (previousValue === 0) return currentValue > 0 ? 100 : 0;
+  return ((currentValue - previousValue) / previousValue) * 100;
+}
+
 exports.getAnalytics = async (req, res) => {
   try {
+    const { type } = req.query; // "yesterday", "weekly", "monthly", "yearly"
+    
     // Step 1: Handle tenant-level analytics (roleId == 0)
     if (req.user.roleId === 0) {
       await getAllTenantReports(req, res);
@@ -2450,37 +2458,143 @@ exports.getAnalytics = async (req, res) => {
         where: { ownerId: req.user.userId },
       });
 
-      let totalIncome = 0; // Initialize total income counter
-      let totalOutcome = 0; // Initialize total income counter
+      let income = 0; // Initialize total income counter
+      let outcome = 0; // Initialize total outcome counter
+      let transactions = 0;
+
+      let previousIncome = 0; // Initialize total previous income counter
+      let previousOutcome = 0; // Initialize total previous outcome counter
+      let previousTransactions = 0; // Initialize total previous transactions counter
+
+      let incomeGrowth;
+      let outcomeGrowth;
+      let transactionGrowth;
+
+      let combinedTransactionGraph = {}; // Initialize an object to accumulate the transaction graphs by date
+      let aggregatedCurrentReports = {}; // Using an object to combine reports based on dateRange
+      let aggregatedPreviousReports = {}; // Using an object to combine reports based on dateRange
+
       try {
         // Step 3: Process each cafe
         for (const cafe of cafes) {
           try {
             // Fetching the report for each cafe
-            const report = await getReportFunction(cafe.dataValues.cafeId, "monthly");
+            const report = await getReportFunction(cafe.dataValues.cafeId, type == undefined ? "weekly" : type);
             cafe.dataValues.report = report; // Add the report to the cafe object
 
             // Calculate the total income and add it to the running total
-            totalIncome += report.currentTotals.income;
-            totalOutcome += report.currentTotals.outcome;
-          }
-          catch {
+            income += report?.currentTotals.income;
+            outcome += report?.currentTotals.outcome;
+            transactions += report?.currentTotals.transactions;
 
+            previousIncome += report?.previousTotals.income;
+            previousOutcome += report?.previousTotals.outcome;
+            previousTransactions += report?.previousTotals.transactions;
+
+            // Calculate Growth for each metric (income, outcome, transactions)
+            incomeGrowth = calculateGrowth(income, previousIncome);
+            outcomeGrowth = calculateGrowth(outcome, previousOutcome);
+            transactionGrowth = calculateGrowth(transactions, previousTransactions);
+
+            // If it's not "monthly" or "yearly", combine transaction graphs
+            if (type !== "monthly" && type !== "yearly") {
+              // Combine transaction graphs by date (ignoring time)
+              report.transactionGraph.forEach((transactionData) => {
+                const date =  transactionData.date;
+
+                // If this date hasn't been encountered yet, initialize it
+                if (!combinedTransactionGraph[date]) {
+                  combinedTransactionGraph[date] = {
+                    date,
+                    hour0To3Transactions: [],
+                    hour3To6Transactions: [],
+                    hour6To9Transactions: [],
+                    hour9To12Transactions: [],
+                    hour12To15Transactions: [],
+                    hour15To18Transactions: [],
+                    hour18To21Transactions: [],
+                    hour21To24Transactions: [],
+                  };
+                }
+
+                // Merge the transaction data into the corresponding date entry
+                Object.keys(transactionData).forEach((key) => {
+                  if (key !== 'date') {
+                    combinedTransactionGraph[date][key] = [
+                      ...(combinedTransactionGraph[date][key] || []),
+                      ...transactionData[key],
+                    ];
+                  }
+                });
+              });
+            } else {
+              // Aggregated report (monthly/yearly), so we combine reports based on date range
+              report?.aggregatedCurrentReports.forEach(aggregatedReport => {
+                const dateRangeKey = `${aggregatedReport.dateRange.start}_${aggregatedReport.dateRange.end}`;
+
+                // If the date range hasn't been encountered yet, initialize it
+                if (!aggregatedCurrentReports[dateRangeKey]) {
+                  aggregatedCurrentReports[dateRangeKey] = {
+                    dateRange: aggregatedReport.dateRange,
+                    income: 0,
+                    outcome: 0,
+                    transactions: 0,
+                  };
+                }
+
+                // Add the current report's values to the corresponding date range
+                aggregatedCurrentReports[dateRangeKey].income += aggregatedReport.income || 0;
+                aggregatedCurrentReports[dateRangeKey].outcome += aggregatedReport.outcome || 0;
+                aggregatedCurrentReports[dateRangeKey].transactions += aggregatedReport.transactions || 0;
+              });
+              // Aggregated report (monthly/yearly), so we combine reports based on date range
+              report?.aggregatedPreviousReports.forEach(aggregatedReport => {
+                const dateRangeKey = `${aggregatedReport.dateRange.start}_${aggregatedReport.dateRange.end}`;
+
+                // If the date range hasn't been encountered yet, initialize it
+                if (!aggregatedPreviousReports[dateRangeKey]) {
+                  aggregatedPreviousReports[dateRangeKey] = {
+                    dateRange: aggregatedReport.dateRange,
+                    income: 0,
+                    outcome: 0,
+                    transactions: 0,
+                  };
+                }
+
+                // Add the current report's values to the corresponding date range
+                aggregatedPreviousReports[dateRangeKey].income += aggregatedReport.income || 0;
+                aggregatedPreviousReports[dateRangeKey].outcome += aggregatedReport.outcome || 0;
+                aggregatedPreviousReports[dateRangeKey].transactions += aggregatedReport.transactions || 0;
+              });
+            }
+          } catch (error) {
+            console.error(`Error fetching report for cafe ${cafe.cafeId}:`, error);
           }
+
           // Fetching the clerks for each cafe
           const clerks = await User.findAll({
             where: { cafeId: cafe.dataValues.cafeId },
           });
           cafe.dataValues.subItems = clerks; // Add the clerks to the cafe object
         }
+      } catch (error) {
+        console.error('Error processing cafes:', error);
       }
-      catch {
 
-      }
+      // Convert the aggregated reports from object to array
+      const aggregatedReportsArray = Object.values(aggregatedCurrentReports);
+      const aggregatedPreviousReportsArray = Object.values(aggregatedPreviousReports);
 
-      // Step 4: Log and return the response
-      console.log(`Total Income from all cafes: ${totalIncome}`);
-      res.status(200).json({ items: cafes, totalIncome, totalOutcome });
+      res.status(200).json({
+        items: cafes,
+        currentTotals: { income, outcome, transactions },
+        previousTotals: { previousIncome, previousOutcome, previousTransactions },
+        growth: { incomeGrowth, outcomeGrowth, transactionGrowth },
+        // Include either combinedTransactionGraph or aggregatedReportsArray depending on type
+        transactionGraph: type !== "monthly" && type !== "yearly" ? Object.values(combinedTransactionGraph) : null,
+        aggregatedCurrentReports: type === "monthly" || type === "yearly" ? aggregatedReportsArray : null,
+        aggregatedPreviousReports: type === "monthly" || type === "yearly" ? aggregatedPreviousReportsArray : null,
+      });
     }
   } catch (error) {
     // Improved error handling
@@ -2491,6 +2605,8 @@ exports.getAnalytics = async (req, res) => {
     });
   }
 };
+
+
 
 
 

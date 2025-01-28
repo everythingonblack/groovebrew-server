@@ -967,7 +967,7 @@ cron.schedule(cronExpression, async () => {
       console.log(`Local time for ${cafe.name} (${cafeTimezone}): ${localTime.format()}`);
 
       // Check if it's midnight (00:00) in the cafe's local timezone
-      const isMidnight = (localTime.hour() === 0 && localTime.minute() >= 0) || (localTime.hour() === 1 && localTime.minute() === 0);
+      const isMidnight = localTime.hour() === 0 && localTime.minute() >= 0 && localTime.minute() < 45;
 
       console.log(isMidnight);  // This will now log true when it's midnight (00:00) in local time
 
@@ -981,7 +981,6 @@ cron.schedule(cronExpression, async () => {
     console.error('Error during cron job execution:', error);
   }
 });
-
 
 const PORT = process.env.PORT || 5000;
 

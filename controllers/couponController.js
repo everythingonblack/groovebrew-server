@@ -55,9 +55,6 @@ exports.createCoupon = async (req, res) => {
       if (!res.ok) {
         throw new Error('Failed to fetch coupon HTML');
       }
-    
-      const html = await res.text();  // Get the response as text (HTML)
-      console.log(html)
     } catch (err) {
       console.error('Error fetching coupon HTML:', err);
     }

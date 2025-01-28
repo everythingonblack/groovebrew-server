@@ -34,18 +34,15 @@ module.exports = {
     dialect: "mysql"
   },
   production: {
-    username: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    dialect: process.env.DB_DIALECT,
-    ssl: process.env.DB_SSL === 'true',
+    username: process.env.DB_USERNAME || "admin",
+    password: process.env.DB_PASSWORD || "1006866715551622",
+    database: process.env.DB_NAME || "production",
+    host: process.env.DB_HOST || "localhost",
+    port: process.env.DB_PORT || 5432,
+    dialect: process.env.DB_DIALECT || "postgres",
     dialectOptions: {
-      ssl: {
-        require: process.env.DB_SSL_REQUIRE === 'true',
-        rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true'
-      }
-    }
-  }
+      ssl: false, // Disable SSL
+    },
+    logging: false, // Optional: Disable logging
+  },
 };

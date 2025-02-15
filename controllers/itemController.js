@@ -40,7 +40,7 @@ exports.createItem = async (req, res) => {
       return res.status(400).json({ error: err.message });
     }
 
-    const { name, description, price, itemTypeId } = req.body;
+    const { name, description, price, promoPrice, itemTypeId } = req.body;
     const image = req.file ? req.file.path : null;
     console.log(req.body);
     console.log(req.cafe.cafeId);
@@ -53,6 +53,7 @@ exports.createItem = async (req, res) => {
         description,
         image,
         price,
+        promoPrice
       });
       console.log(newItem);
       res.status(201).json(newItem);
@@ -108,7 +109,7 @@ exports.updateItem = async (req, res) => {
     console.log(req.params.itemId);
     console.log(req.body);
     const { itemId } = req.params;
-    const { stock, name, price, description } = req.body;
+    const { stock, name, price, promoPrice, description } = req.body;
     const image = req.file ? req.file.path : null;
 
     try {
@@ -116,6 +117,7 @@ exports.updateItem = async (req, res) => {
       if (item) {
         item.name = name;
         item.price = price;
+        item.promoPrice = promoPrice;
         item.description = description;
         if (image) item.image = image;
 
@@ -373,7 +375,7 @@ exports.getCartDetails = async (req, res) => {
       }
       acc[itemTypeId].itemList.push({
         itemId: item.itemId,
-        price: item.price,
+        price: item.promoPrice > 0 ? item.promoPrice : item.price,
         name: item.name,
         image: item.image,
         qty: cartItems.find((cartItem) => cartItem.itemId === item.itemId).qty,

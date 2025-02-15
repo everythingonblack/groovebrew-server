@@ -9,6 +9,7 @@ const {
   Material,
   MaterialMutation,
   DailyReport,
+  Coupon,
   sequelize,
 } = require("../models");
 const { Op, fn, col } = require("sequelize");
@@ -2075,6 +2076,8 @@ async function getReportFunction(cafeId, type) {
     // Aggregate sold items
     const soldItems = {};
     let totalSoldItems = 0;
+    const spendMaterials = {};
+    let totalSpendItems = 0;
 
     currentReports2.forEach(report => {
       for (let i = 0; i <= 23; i++) {
@@ -2092,6 +2095,22 @@ async function getReportFunction(cafeId, type) {
         }
       }
     });
+    currentReports2.forEach(report => {
+      for (let i = 0; i <= 23; i++) {
+        const hourMaterialIds = report[`hour${i}To${i + 3}MaterialIds`]; // e.g. hour0To3Transactions
+        if (hourMaterialIds && hourMaterialIds.length > 0) {
+          hourMaterialIds.forEach(mutation => {
+            const { materialId, stockDifference, materialName } = mutation;
+            if (!spendMaterials[materialId]) {
+              spendMaterials[materialId] = { spend: 0, materialName };
+            }
+            spendMaterials[materialId].spend += stockDifference;
+            spendMaterials[materialId].materialName = materialName;
+            totalSpendItems += stockDifference;
+          });
+        }
+      }
+    });
 
     const itemPercentage = Object.keys(soldItems).map(itemId => {
       const itemData = soldItems[itemId];
@@ -2103,6 +2122,17 @@ async function getReportFunction(cafeId, type) {
         percentage,
       };
     }).sort((a, b) => b.sold - a.sold); // Sort by 'sold' in descending order
+
+    const materialPercentage = Object.keys(spendMaterials).map(materialId => {
+      const itemData = spendMaterials[materialId];
+      const percentage = ((itemData.spend / totalSpendItems) * 100).toFixed(2);
+      return {
+        materialId: Number(materialId),
+        spend: itemData.spend,
+        materialName: itemData.materialName || '',
+        percentage,
+      };
+    }).sort((a, b) => b.spend - a.spend); // Sort by 'sold' in descending order
 
 
     // Aggregation for yearly (by quarters)
@@ -2218,6 +2248,7 @@ async function getReportFunction(cafeId, type) {
         hour21To24MaterialIds: r.hour21To24MaterialIds,
       })),
       itemSales: itemPercentage, // Add item sales data here
+      materialSpend: materialPercentage,
       aggregatedCurrentReports,  // Current aggregation (monthly or yearly)
       aggregatedPreviousReports,  // Previous aggregation (monthly or yearly)
     };
@@ -2448,7 +2479,7 @@ function calculateGrowth(currentValue, previousValue) {
 exports.getAnalytics = async (req, res) => {
   try {
     const { type } = req.query; // "yesterday", "weekly", "monthly", "yearly"
-    
+
     // Step 1: Handle tenant-level analytics (roleId == 0)
     if (req.user.roleId === 0) {
       await getAllTenantReports(req, res);
@@ -2471,6 +2502,7 @@ exports.getAnalytics = async (req, res) => {
       let transactionGrowth;
 
       let combinedTransactionGraph = {}; // Initialize an object to accumulate the transaction graphs by date
+      let combinedMaterialGraph = {}; // Initialize an object to accumulate the transaction graphs by date
       let aggregatedCurrentReports = {}; // Using an object to combine reports based on dateRange
       let aggregatedPreviousReports = {}; // Using an object to combine reports based on dateRange
 
@@ -2500,7 +2532,7 @@ exports.getAnalytics = async (req, res) => {
             if (type !== "monthly" && type !== "yearly") {
               // Combine transaction graphs by date (ignoring time)
               report.transactionGraph.forEach((transactionData) => {
-                const date =  transactionData.date;
+                const date = transactionData.date;
 
                 // If this date hasn't been encountered yet, initialize it
                 if (!combinedTransactionGraph[date]) {
@@ -2523,6 +2555,35 @@ exports.getAnalytics = async (req, res) => {
                     combinedTransactionGraph[date][key] = [
                       ...(combinedTransactionGraph[date][key] || []),
                       ...transactionData[key],
+                    ];
+                  }
+                });
+              });
+              console.log(report.materialGraph)
+              report.materialGraph.forEach((mutationData) => {
+                const date = mutationData.date;
+
+                // If this date hasn't been encountered yet, initialize it
+                if (!combinedMaterialGraph[date]) {
+                  combinedMaterialGraph[date] = {
+                    date,
+                    hour0To3MaterialIds: [],
+                    hour3To6MaterialIds: [],
+                    hour6To9MaterialIds: [],
+                    hour9To12MaterialIds: [],
+                    hour12To15MaterialIds: [],
+                    hour15To18MaterialIds: [],
+                    hour18To21MaterialIds: [],
+                    hour21To24MaterialIds: [],
+                  };
+                }
+
+                // Merge the transaction data into the corresponding date entry
+                Object.keys(mutationData).forEach((key) => {
+                  if (key !== 'date') {
+                    combinedMaterialGraph[date][key] = [
+                      ...(combinedMaterialGraph[date][key] || []),
+                      ...mutationData[key],
                     ];
                   }
                 });
@@ -2592,6 +2653,7 @@ exports.getAnalytics = async (req, res) => {
         growth: { incomeGrowth, outcomeGrowth, transactionGrowth },
         // Include either combinedTransactionGraph or aggregatedReportsArray depending on type
         transactionGraph: type !== "monthly" && type !== "yearly" ? Object.values(combinedTransactionGraph) : null,
+        materialGraph: type !== "monthly" && type !== "yearly" ? Object.values(combinedMaterialGraph) : null,
         aggregatedCurrentReports: type === "monthly" || type === "yearly" ? aggregatedReportsArray : null,
         aggregatedPreviousReports: type === "monthly" || type === "yearly" ? aggregatedPreviousReportsArray : null,
       });
@@ -2633,41 +2695,46 @@ async function getAllTenantReports(req, res) {
 
     // Step 5: Loop through each tenant to fetch their cafes and calculate totalIncome
     for (let tenant of tenants) {
+
+      const coupons = await Coupon.findAll({
+        where: {
+          userId: tenant.userId,
+        },
+        order: [
+          ['discountEndDate', 'ASC'], // Order by discountEndDate, oldest first
+        ],
+      });
       // Fetch cafes for the current tenant
       const cafes = await Cafe.findAll({
         where: {
           ownerId: tenant.userId // Get cafes for the specific tenant by userId
         },
-        attributes: ['cafeId', 'name', 'image', 'ownerId', 'welcomePageConfig', 'createdAt', 'updatedAt'] // Cafe details
+        attributes: ['cafeId', 'name', 'image', 'ownerId'] // Cafe details
       });
 
-      // If the tenant owns no cafes, skip to the next tenant
-      if (cafes.length === 0) {
-        continue;
-      }
-
       // Step 6: Fetch reports for each cafe owned by this tenant in parallel
-      const reports = await Promise.all(
-        cafes.map(cafe => getReportFunction(cafe.cafeId, 'monthly')) // Fetch report for each cafe
-      );
+      // const reports = await Promise.all(
+      //   cafes.map(cafe => getReportFunction(cafe.cafeId, 'monthly')) // Fetch report for each cafe
+      // );
 
-      // Step 7: Calculate the total income for the current tenant
-      const totalIncomeForTenant = reports.reduce((sum, report) => {
-        return sum + (report?.currentTotals?.income || 0); // Add the totalIncome for each cafe's report
-      }, 0);
+      // // Step 7: Calculate the total income for the current tenant
+      // const totalIncomeForTenant = reports.reduce((sum, report) => {
+      //   return sum + (report?.currentTotals?.income || 0); // Add the totalIncome for each cafe's report
+      // }, 0);
 
-      // Add this tenant's total income to the overall total income
-      totalIncomeFromAllTenant += totalIncomeForTenant;
+      // // Add this tenant's total income to the overall total income
+      // totalIncomeFromAllTenant += totalIncomeForTenant;
 
       // Step 8: Add the tenant with their cafes and corresponding reports to the result
       const tenantWithCafesAndReports = {
         userId: tenant.userId,
         username: tenant.username,
         email: tenant.email,
-        totalIncome: totalIncomeForTenant, // Add the total income for this tenant
-        subItems: cafes.map((cafe, index) => ({
+        coupons,
+        // totalIncome: totalIncomeForTenant, // Add the total income for this tenant
+        subItems: cafes.map((cafe) => ({
           ...cafe.dataValues, // Include all cafe details
-          report: reports[index] // Attach the corresponding report
+          // report: reports[index] // Attach the corresponding report
         }))
       };
 
@@ -2677,7 +2744,7 @@ async function getAllTenantReports(req, res) {
 
     // Step 9: Return the final result with tenants, cafes, reports, total income from all tenants
     res.status(200).json({
-      totalIncome: totalIncomeFromAllTenant, // Add the total income from all tenants
+      // totalIncome: totalIncomeFromAllTenant, // Add the total income from all tenants
       items: tenantCafeReports // Add tenants data with their cafes and reports
     });
 

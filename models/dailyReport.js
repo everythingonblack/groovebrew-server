@@ -172,6 +172,13 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.FLOAT, // Sum of all hourly transaction counts
       allowNull: true
     },
+
+    // New variable for total promotional spend
+    totalPromoSpend: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: true
+    },
   }, {
     tableName: 'DailyReport',
     freezeTableName: true

@@ -375,7 +375,8 @@ exports.getCartDetails = async (req, res) => {
       }
       acc[itemTypeId].itemList.push({
         itemId: item.itemId,
-        price: item.promoPrice > 0 ? item.promoPrice : item.price,
+        price: item.price,
+        promoPrice: item.promoPrice,
         name: item.name,
         image: item.image,
         qty: cartItems.find((cartItem) => cartItem.itemId === item.itemId).qty,

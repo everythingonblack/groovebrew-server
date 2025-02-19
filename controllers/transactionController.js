@@ -9,6 +9,7 @@ const {
   Material,
   MaterialMutation,
   DailyReport,
+  Coupon,
   sequelize,
 } = require("../models");
 const { Op, fn, col } = require("sequelize");
@@ -94,6 +95,8 @@ exports.transactionFromClerk = async (req, res) => {
             transactionId: newTransaction.transactionId,
             itemId: item.itemId,
             qty: item.qty,
+            price: item.price,
+            promoPrice: item.promoPrice
           },
           { transaction: t }
         );
@@ -206,6 +209,8 @@ exports.transactionFromGuestSide = async (req, res) => {
             transactionId: newTransaction.transactionId,
             itemId: item.itemId,
             qty: item.qty,
+            price: item.price,
+            promoPrice: item.promoPrice
           },
           { transaction: t }
         );
@@ -305,11 +310,17 @@ exports.transactionFromGuestDevice = async (req, res) => {
 
       // Create detailed transaction records
       const detailedTransactions = transactions.items.map(async (item) => {
+        const itemPrice = await Item.findByPk(item.itemId, {
+          attributes: ['price', 'promoPrice'],  // Select only the price and promoPrice fields
+        });        
+
         await DetailedTransaction.create(
           {
             transactionId: newTransaction.transactionId,
             itemId: item.itemId,
             qty: item.qty,
+            price: itemPrice.dataValues.price,
+            promoPrice: itemPrice. dataValues.promoPrice
           },
           { transaction: t }
         );
@@ -1159,109 +1170,6 @@ exports.getTransactionTotalsWithPercentageChange = async (req, res) => {
   }
 };
 
-// exports.getTransactions = async (req, res) => {
-//   const { cafeId } = req.params;
-//   const { demandLength } = req.query;
-
-//   if (req.user.cafeId != cafeId) {
-//     return res.status(401).json({ error: "Unauthorized" });
-//   }
-
-//   try {
-//     // Convert demandLength to integer and set limit
-//     const limit = parseInt(demandLength, 10);
-
-//     // Prepare the query options
-//     const queryOptions = {
-//       where: { cafeId: cafeId },
-//       order: [["createdAt", "DESC"]],
-//       include: [
-//         {
-//           model: DetailedTransaction,
-//           include: [
-//             {
-//               model: Item,
-//               include: [ItemType],
-//             },
-//           ],
-//         },
-//         {
-//           model: Table,
-//         },
-//       ],
-//     };
-
-//     // Apply the limit if it's not -1
-//     if (limit !== -1) {
-//       queryOptions.limit = limit;
-//     }
-
-//     // Retrieve transactions
-//     const transactions = await Transaction.findAll(queryOptions);
-
-//     // Initialize an array to store the final result
-//     const result = [];
-
-//     // Process transactions
-//     transactions.forEach((transaction) => {
-//       // Initialize a map to collect items by ItemType for the current transaction
-//       const itemTypeMap = new Map();
-
-//       transaction.DetailedTransactions.forEach((detailed) => {
-//         if (detailed.Item && detailed.Item.ItemType) {
-//           const itemType = detailed.Item.ItemType;
-
-//           // Create an entry in the map if it doesn't exist
-//           if (!itemTypeMap.has(itemType.itemTypeId)) {
-//             itemTypeMap.set(itemType.itemTypeId, {
-//               itemTypeId: itemType.itemTypeId,
-//               cafeId: itemType.cafeId,
-//               typeName: itemType.name,
-//               itemList: [],
-//             });
-//           }
-
-//           // Add item to the correct itemType entry
-//           itemTypeMap.get(itemType.itemTypeId).itemList.push({
-//             itemId: detailed.itemId,
-//             price: detailed.Item.price,
-//             name: detailed.Item.name,
-//             image: detailed.Item.image,
-//             qty: detailed.qty,
-//           });
-//         }
-//       });
-
-//       // Convert the map values to an array
-//       const itemTypeList = Array.from(itemTypeMap.values());
-
-//       // Add transaction details along with itemTypeList to the result
-//       result.push({
-//         transactionId: transaction.transactionId,
-//         userId: transaction.userId,
-//         user_email: transaction.user_email,
-//         clerkId: transaction.clerkId,
-//         tableId: transaction.tableId,
-//         cafeId: transaction.cafeId,
-//         payment_type: transaction.payment_type,
-//         serving_type: transaction.serving_type,
-//         is_paid: transaction.is_paid,
-//         confirmed: transaction.confirmed,
-//         createdAt: transaction.createdAt,
-//         updatedAt: transaction.updatedAt,
-//         Table: transaction.Table,
-//         itemTypes: itemTypeList,
-//       });
-//     });
-
-//     res.status(200).json(result);
-//   } catch (error) {
-//     console.error("Error fetching transactions:", error);
-//     res.status(500).json({ error: "Internal server error" });
-//   }
-// };
-
-// Controller to update a user
 exports.endCashTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
@@ -1338,7 +1246,7 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
       attributes: ['transactionId'], // Include transactionId to track transactions
     }, {
       model: Item, // Assuming you have an Item model to get item price
-      attributes: ['itemId', 'name', 'price'], // Include itemId and price
+      attributes: ['itemId', 'name'], // Include itemId and price
     }],
   });
 
@@ -1361,14 +1269,14 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
 
   // Initialize hourly bins for income, outcome, transactions, and materialIds
   const hourlyData = {
-    hour0To3: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour3To6: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour6To9: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour9To12: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour12To15: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour15To18: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour18To21: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour21To24: { income: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() }
+    hour0To3: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour3To6: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour6To9: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour9To12: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour12To15: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour15To18: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour18To21: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour21To24: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() }
   };
 
   detailedTransactions.forEach(detailedTransaction => {
@@ -1376,7 +1284,7 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
     const itemId = detailedTransaction.itemId;
     const itemName = detailedTransaction.Item.dataValues.name;
     const sold = detailedTransaction.qty;
-    const price = detailedTransaction.Item.price; // Get item price
+    const price = detailedTransaction.promoPrice > 0 ? detailedTransaction.promoPrice : detailedTransaction.price; // Get item price
     const createdAt = moment(detailedTransaction.createdAt).tz(cafeTimezone); // Convert to cafe's local time
 
     // Determine the time period (hour) for the transaction based on cafe's local time
@@ -1403,9 +1311,11 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
 
     // Calculate the total price for this item sold in the current transaction
     const totalPrice = sold * price;
+    const promoSpend = detailedTransaction.promoPrice ? detailedTransaction.price - detailedTransaction.promoPrice : 0 || 0;
 
     // Update the corresponding hourly data (income, outcome, transactions, materials)
     hourlyData[hourRange].income += totalPrice;
+    hourlyData[hourRange].promoSpend += promoSpend;
 
     // Add the transaction to the unique transactions set (to avoid double counting)
     hourlyData[hourRange].uniqueTransactions.add(transactionId);
@@ -1468,6 +1378,8 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
 
   // Calculate the total income, outcome, and transactions for the entire day
   const totalIncome = Object.values(hourlyData).reduce((acc, data) => acc + data.income, 0);
+  const totalPromoSpend = Object.values(hourlyData).reduce((acc, data) => acc + data.promoSpend, 0);
+  console.log(totalPromoSpend)
   const totalOutcome = Object.values(hourlyData).reduce((acc, data) => acc + data.outcome, 0);
 
   // Now use the uniqueTransactions set to calculate totalTransactions
@@ -1521,7 +1433,8 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
 
     totalIncome,
     totalOutcome,
-    totalTransactions
+    totalTransactions,
+    totalPromoSpend
   });
 
   console.log(`Report generated for cafe ${cafeId} on ${startOfDay.format()}`);
@@ -2039,12 +1952,13 @@ async function getReportFunction(cafeId, type) {
     const calculateTotals = (reports) => {
       return reports.reduce(
         (totals, report) => {
+          totals.totalPromoSpend += report.totalPromoSpend;
           totals.income += report.totalIncome;
           totals.outcome += report.totalOutcome;
           totals.transactions += report.totalTransactions;
           return totals;
         },
-        { income: 0, outcome: 0, transactions: 0 }
+        { totalPromoSpend: 0, income: 0, outcome: 0, transactions: 0 }
       );
     };
 
@@ -2075,6 +1989,8 @@ async function getReportFunction(cafeId, type) {
     // Aggregate sold items
     const soldItems = {};
     let totalSoldItems = 0;
+    const spendMaterials = {};
+    let totalSpendItems = 0;
 
     currentReports2.forEach(report => {
       for (let i = 0; i <= 23; i++) {
@@ -2092,6 +2008,22 @@ async function getReportFunction(cafeId, type) {
         }
       }
     });
+    currentReports2.forEach(report => {
+      for (let i = 0; i <= 23; i++) {
+        const hourMaterialIds = report[`hour${i}To${i + 3}MaterialIds`]; // e.g. hour0To3Transactions
+        if (hourMaterialIds && hourMaterialIds.length > 0) {
+          hourMaterialIds.forEach(mutation => {
+            const { materialId, stockDifference, materialName } = mutation;
+            if (!spendMaterials[materialId]) {
+              spendMaterials[materialId] = { spend: 0, materialName };
+            }
+            spendMaterials[materialId].spend += stockDifference;
+            spendMaterials[materialId].materialName = materialName;
+            totalSpendItems += stockDifference;
+          });
+        }
+      }
+    });
 
     const itemPercentage = Object.keys(soldItems).map(itemId => {
       const itemData = soldItems[itemId];
@@ -2103,6 +2035,17 @@ async function getReportFunction(cafeId, type) {
         percentage,
       };
     }).sort((a, b) => b.sold - a.sold); // Sort by 'sold' in descending order
+
+    const materialPercentage = Object.keys(spendMaterials).map(materialId => {
+      const itemData = spendMaterials[materialId];
+      const percentage = ((itemData.spend / totalSpendItems) * 100).toFixed(2);
+      return {
+        materialId: Number(materialId),
+        spend: itemData.spend,
+        materialName: itemData.materialName || '',
+        percentage,
+      };
+    }).sort((a, b) => b.spend - a.spend); // Sort by 'sold' in descending order
 
 
     // Aggregation for yearly (by quarters)
@@ -2218,6 +2161,7 @@ async function getReportFunction(cafeId, type) {
         hour21To24MaterialIds: r.hour21To24MaterialIds,
       })),
       itemSales: itemPercentage, // Add item sales data here
+      materialSpend: materialPercentage,
       aggregatedCurrentReports,  // Current aggregation (monthly or yearly)
       aggregatedPreviousReports,  // Previous aggregation (monthly or yearly)
     };
@@ -2448,7 +2392,7 @@ function calculateGrowth(currentValue, previousValue) {
 exports.getAnalytics = async (req, res) => {
   try {
     const { type } = req.query; // "yesterday", "weekly", "monthly", "yearly"
-    
+
     // Step 1: Handle tenant-level analytics (roleId == 0)
     if (req.user.roleId === 0) {
       await getAllTenantReports(req, res);
@@ -2458,6 +2402,7 @@ exports.getAnalytics = async (req, res) => {
         where: { ownerId: req.user.userId },
       });
 
+      let totalPromoSpend = 0; // Initialize total income counter
       let income = 0; // Initialize total income counter
       let outcome = 0; // Initialize total outcome counter
       let transactions = 0;
@@ -2471,6 +2416,7 @@ exports.getAnalytics = async (req, res) => {
       let transactionGrowth;
 
       let combinedTransactionGraph = {}; // Initialize an object to accumulate the transaction graphs by date
+      let combinedMaterialGraph = {}; // Initialize an object to accumulate the transaction graphs by date
       let aggregatedCurrentReports = {}; // Using an object to combine reports based on dateRange
       let aggregatedPreviousReports = {}; // Using an object to combine reports based on dateRange
 
@@ -2483,6 +2429,8 @@ exports.getAnalytics = async (req, res) => {
             cafe.dataValues.report = report; // Add the report to the cafe object
 
             // Calculate the total income and add it to the running total
+            totalPromoSpend += report?.currentTotals.totalPromoSpend;
+            console.log(totalPromoSpend)
             income += report?.currentTotals.income;
             outcome += report?.currentTotals.outcome;
             transactions += report?.currentTotals.transactions;
@@ -2500,7 +2448,7 @@ exports.getAnalytics = async (req, res) => {
             if (type !== "monthly" && type !== "yearly") {
               // Combine transaction graphs by date (ignoring time)
               report.transactionGraph.forEach((transactionData) => {
-                const date =  transactionData.date;
+                const date = transactionData.date;
 
                 // If this date hasn't been encountered yet, initialize it
                 if (!combinedTransactionGraph[date]) {
@@ -2523,6 +2471,35 @@ exports.getAnalytics = async (req, res) => {
                     combinedTransactionGraph[date][key] = [
                       ...(combinedTransactionGraph[date][key] || []),
                       ...transactionData[key],
+                    ];
+                  }
+                });
+              });
+              console.log(report.materialGraph)
+              report.materialGraph.forEach((mutationData) => {
+                const date = mutationData.date;
+
+                // If this date hasn't been encountered yet, initialize it
+                if (!combinedMaterialGraph[date]) {
+                  combinedMaterialGraph[date] = {
+                    date,
+                    hour0To3MaterialIds: [],
+                    hour3To6MaterialIds: [],
+                    hour6To9MaterialIds: [],
+                    hour9To12MaterialIds: [],
+                    hour12To15MaterialIds: [],
+                    hour15To18MaterialIds: [],
+                    hour18To21MaterialIds: [],
+                    hour21To24MaterialIds: [],
+                  };
+                }
+
+                // Merge the transaction data into the corresponding date entry
+                Object.keys(mutationData).forEach((key) => {
+                  if (key !== 'date') {
+                    combinedMaterialGraph[date][key] = [
+                      ...(combinedMaterialGraph[date][key] || []),
+                      ...mutationData[key],
                     ];
                   }
                 });
@@ -2587,11 +2564,12 @@ exports.getAnalytics = async (req, res) => {
 
       res.status(200).json({
         items: cafes,
-        currentTotals: { income, outcome, transactions },
+        currentTotals: { totalPromoSpend, income, outcome, transactions },
         previousTotals: { previousIncome, previousOutcome, previousTransactions },
         growth: { incomeGrowth, outcomeGrowth, transactionGrowth },
         // Include either combinedTransactionGraph or aggregatedReportsArray depending on type
         transactionGraph: type !== "monthly" && type !== "yearly" ? Object.values(combinedTransactionGraph) : null,
+        materialGraph: type !== "monthly" && type !== "yearly" ? Object.values(combinedMaterialGraph) : null,
         aggregatedCurrentReports: type === "monthly" || type === "yearly" ? aggregatedReportsArray : null,
         aggregatedPreviousReports: type === "monthly" || type === "yearly" ? aggregatedPreviousReportsArray : null,
       });
@@ -2633,41 +2611,46 @@ async function getAllTenantReports(req, res) {
 
     // Step 5: Loop through each tenant to fetch their cafes and calculate totalIncome
     for (let tenant of tenants) {
+
+      const coupons = await Coupon.findAll({
+        where: {
+          userId: tenant.userId,
+        },
+        order: [
+          ['discountEndDate', 'ASC'], // Order by discountEndDate, oldest first
+        ],
+      });
       // Fetch cafes for the current tenant
       const cafes = await Cafe.findAll({
         where: {
           ownerId: tenant.userId // Get cafes for the specific tenant by userId
         },
-        attributes: ['cafeId', 'name', 'image', 'ownerId', 'welcomePageConfig', 'createdAt', 'updatedAt'] // Cafe details
+        attributes: ['cafeId', 'name', 'image', 'ownerId'] // Cafe details
       });
 
-      // If the tenant owns no cafes, skip to the next tenant
-      if (cafes.length === 0) {
-        continue;
-      }
-
       // Step 6: Fetch reports for each cafe owned by this tenant in parallel
-      const reports = await Promise.all(
-        cafes.map(cafe => getReportFunction(cafe.cafeId, 'monthly')) // Fetch report for each cafe
-      );
+      // const reports = await Promise.all(
+      //   cafes.map(cafe => getReportFunction(cafe.cafeId, 'monthly')) // Fetch report for each cafe
+      // );
 
-      // Step 7: Calculate the total income for the current tenant
-      const totalIncomeForTenant = reports.reduce((sum, report) => {
-        return sum + (report?.currentTotals?.income || 0); // Add the totalIncome for each cafe's report
-      }, 0);
+      // // Step 7: Calculate the total income for the current tenant
+      // const totalIncomeForTenant = reports.reduce((sum, report) => {
+      //   return sum + (report?.currentTotals?.income || 0); // Add the totalIncome for each cafe's report
+      // }, 0);
 
-      // Add this tenant's total income to the overall total income
-      totalIncomeFromAllTenant += totalIncomeForTenant;
+      // // Add this tenant's total income to the overall total income
+      // totalIncomeFromAllTenant += totalIncomeForTenant;
 
       // Step 8: Add the tenant with their cafes and corresponding reports to the result
       const tenantWithCafesAndReports = {
         userId: tenant.userId,
         username: tenant.username,
         email: tenant.email,
-        totalIncome: totalIncomeForTenant, // Add the total income for this tenant
-        subItems: cafes.map((cafe, index) => ({
+        coupons,
+        // totalIncome: totalIncomeForTenant, // Add the total income for this tenant
+        subItems: cafes.map((cafe) => ({
           ...cafe.dataValues, // Include all cafe details
-          report: reports[index] // Attach the corresponding report
+          // report: reports[index] // Attach the corresponding report
         }))
       };
 
@@ -2677,7 +2660,7 @@ async function getAllTenantReports(req, res) {
 
     // Step 9: Return the final result with tenants, cafes, reports, total income from all tenants
     res.status(200).json({
-      totalIncome: totalIncomeFromAllTenant, // Add the total income from all tenants
+      // totalIncome: totalIncomeFromAllTenant, // Add the total income from all tenants
       items: tenantCafeReports // Add tenants data with their cafes and reports
     });
 

@@ -3,6 +3,9 @@ const bcrypt = require('bcrypt');  // For password hashing
 const { Op } = require("sequelize");
 const { generateToken } = require("../services/jwtHelper"); // Import the JWT helper
 
+
+const CryptoJS = require('crypto-js');
+
 function generateCouponCode(length = 8) {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ023456789abdghmqrsuwz';
   let couponCode = '';
@@ -18,7 +21,7 @@ const fetch = require('node-fetch'); // Ensure you have node-fetch installed if 
 exports.createCoupon = async (req, res) => {
   try {
     // Destructure required fields from the request body
-    const { discountType, discountValue, discountPeriods, expirationDate } = req.body;
+    const { couponCodeExpect, discountType, discountValue, discountPeriods } = req.body;
 
     // Check for missing required fields
     if (!discountValue || !discountPeriods) {
@@ -38,9 +41,14 @@ exports.createCoupon = async (req, res) => {
 
       return couponCode;
     };
-
+    let couponCode;
     // Generate a unique coupon code
-    const couponCode = await generateUniqueCouponCode();
+    if (couponCodeExpect == undefined) couponCode = await generateUniqueCouponCode();
+    else {
+      let existingCoupon = await Coupon.findOne({ where: { code: couponCodeExpect } });
+      if (existingCoupon) return res.status(409).json({ message: "coupon code exist" });
+      couponCode = couponCodeExpect;
+    }
 
     // You can replace fetch with a more appropriate async task
     // If you need to do something with the HTML (for example, fetch a preview)
@@ -51,7 +59,7 @@ exports.createCoupon = async (req, res) => {
           'Content-Type': 'application/json',  // Indicate that we're sending JSON
         },
       });
-      
+
       if (!res.ok) {
         throw new Error('Failed to fetch coupon HTML');
       }
@@ -111,6 +119,13 @@ exports.createUserWithCoupon = async (req, res) => {
   try {
     const { username, email, password, couponCode } = req.body;
     console.log('Received Coupon Code:', couponCode);
+    
+    const secretKey = 'xixixi666'; // 32 characters for AES-256
+
+    // Decrypt the couponCode
+    const decryptedBytes = CryptoJS.AES.decrypt(couponCode, secretKey);
+    const decryptedCode = decryptedBytes.toString(CryptoJS.enc.Utf8);
+
 
     // Validate required fields
     if (!username || !password) {
@@ -118,11 +133,11 @@ exports.createUserWithCoupon = async (req, res) => {
     }
 
     // Find the coupon by its code
-    const coupon = await Coupon.findOne({ where: { code: couponCode } });
+    const coupon = await Coupon.findOne({ where: { code: decryptedCode } });
     if (!coupon) {
       return res.status(404).json({ message: "Coupon code is invalid" });
     }
-
+    console.log(coupon)
     // Check if the coupon has already been used
     if (coupon.userId) {
       return res.status(400).json({ message: "Coupon has already been used" });
@@ -163,8 +178,8 @@ exports.createUserWithCoupon = async (req, res) => {
 
     // Optionally post something to an external service (e.g., your coupon URL)
     try {
-      fetch(`https://coupon.kedaimaster.com/coupon?couponCode=${couponCode}`, {
-        method: 'POST',  // Specify that this is a POST request
+      fetch(`https://dev.coupon.kedaimaster.com/coupon?couponCode=${decryptedCode}`, {
+        method: 'DELETE',  // Specify that this is a POST request
         headers: {
           'Content-Type': 'application/json',  // Indicate that we're sending JSON
         },
@@ -261,7 +276,7 @@ exports.logCouponToUser = async (req, res) => {
       discountEndDate: discountEndDate,  // Pass as a valid Date object
       userId: req.user.userId,
     });
-    
+
     // Optionally post something to an external service (e.g., your coupon URL)
     try {
       fetch(`https://coupon.kedaimaster.com/coupon?couponCode=${couponCode}`, {

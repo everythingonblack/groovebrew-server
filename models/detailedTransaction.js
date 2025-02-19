@@ -27,6 +27,16 @@ module.exports = (sequelize, DataTypes) => {
     qty: {
       type: DataTypes.INTEGER,
       allowNull: false
+    },
+    price: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: true  // Changed to true
+    },
+    promoPrice: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: true  // Changed to true
     }
   }, {
     tableName: 'DetailedTransaction',

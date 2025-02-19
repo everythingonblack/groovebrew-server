@@ -115,10 +115,10 @@ exports.updateItem = async (req, res) => {
     try {
       const item = await Item.findByPk(itemId);
       if (item) {
-        item.name = name;
-        item.price = price;
-        item.promoPrice = promoPrice;
-        item.description = description;
+        if(name) item.name = name;
+        if(price) item.price = price;
+        if(promoPrice) item.promoPrice = promoPrice;
+        if(description) item.description = description;
         if (image) item.image = image;
 
         await item.save();

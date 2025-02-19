@@ -38,4 +38,7 @@ router.put(
   cafeController.setIsNeedConfirmation
 ); // Update an item by its ID
 
+
+router.get("/check-identifyName/:cafeIdentifyName", cafeController.checkIdentifyName);
+
 module.exports = router;

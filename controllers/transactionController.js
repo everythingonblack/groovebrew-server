@@ -2429,7 +2429,8 @@ exports.getAnalytics = async (req, res) => {
             cafe.dataValues.report = report; // Add the report to the cafe object
 
             // Calculate the total income and add it to the running total
-            totalPromoSpend += report?.totalPromoSpend;
+            totalPromoSpend += report?.currentTotals.totalPromoSpend;
+            console.log(totalPromoSpend)
             income += report?.currentTotals.income;
             outcome += report?.currentTotals.outcome;
             transactions += report?.currentTotals.transactions;

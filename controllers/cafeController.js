@@ -204,6 +204,27 @@ exports.getCafeByIdentifier = async (req, res) => {
   }
 };
 
+exports.checkIdentifyName = async (req, res) => {
+  const { cafeIdentifyName } = req.params;
+
+  try {
+    const cafe = await Cafe.findOne({
+      where: { cafeIdentifyName },
+      attributes: ['cafeId'] // Only retrieve cafeId
+    });
+
+    if (!cafe) {
+      console.log('cafeNot found')
+      return res.status(200).json({ status: "Cafe identify name available" });
+    }
+    
+    console.log('cafe found')
+    res.status(409).json({ error: "Cafe not found" });
+  } catch (error) {
+    console.error("Error fetching cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
 // Get cafe by ID
 exports.getCafeById = async (req, res) => {
   const { cafeId } = req.params;

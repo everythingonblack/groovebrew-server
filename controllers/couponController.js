@@ -21,7 +21,7 @@ const fetch = require('node-fetch'); // Ensure you have node-fetch installed if 
 exports.createCoupon = async (req, res) => {
   try {
     // Destructure required fields from the request body
-    const { couponCodeExpect, discountType, discountValue, discountPeriods } = req.body;
+    const { couponCodeExpect, discountType, discountValue, discountPeriods, expirationDate } = req.body;
 
     // Check for missing required fields
     if (!discountValue || !discountPeriods) {
@@ -43,7 +43,7 @@ exports.createCoupon = async (req, res) => {
     };
     let couponCode;
     // Generate a unique coupon code
-    if (couponCodeExpect == undefined) couponCode = await generateUniqueCouponCode();
+    if (couponCodeExpect == undefined || couponCodeExpect == '') couponCode = await generateUniqueCouponCode();
     else {
       let existingCoupon = await Coupon.findOne({ where: { code: couponCodeExpect } });
       if (existingCoupon) return res.status(409).json({ message: "coupon code exist" });
@@ -53,7 +53,7 @@ exports.createCoupon = async (req, res) => {
     // You can replace fetch with a more appropriate async task
     // If you need to do something with the HTML (for example, fetch a preview)
     try {
-      const res =  await fetch(`https://coupon.kedaimaster.com/coupon?couponCode=${couponCode}&discountType=${discountType}&discountValue=${discountValue}&expirationDate=${expirationDate}&discountPeriods=${discountPeriods}`, {
+      const res =  await fetch(`https://dev.coupon.kedaimaster.com/coupon?couponCode=${couponCode}&discountType=${discountType}&discountValue=${discountValue}&expirationDate=${expirationDate}&discountPeriods=${discountPeriods}`, {
         method: 'POST',  // Specify that this is a POST request
         headers: {
           'Content-Type': 'application/json',  // Indicate that we're sending JSON

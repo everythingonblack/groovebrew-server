@@ -31,12 +31,22 @@ module.exports = (sequelize, DataTypes) => {
     price: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
-      allowNull: true  // Changed to true
+      allowNull: true
     },
     promoPrice: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
-      allowNull: true  // Changed to true
+      allowNull: true
+    },
+    acceptedStatus: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,  // Default value set to 0
+      allowNull: true  // Can be null, or if you prefer, set allowNull: false if it's required
+    },
+    additionalNumber: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,  // Default value set to 0
+      allowNull: true  // Can be null, or set allowNull: false if required
     }
   }, {
     tableName: 'DetailedTransaction',

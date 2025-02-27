@@ -8,7 +8,6 @@ function generateCafeId() {
   return `${uuid.slice(0, 5)}-${uuid.slice(5, 10)}-${uuid.slice(10, 15)}`; // Return formatted string
 }
 
-
 module.exports = (sequelize, DataTypes) => {
   const Cafe = sequelize.define(
     "Cafe",
@@ -99,6 +98,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
         defaultValue: 68.0,
+      },
+      isQRISavailable: {  // New field
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      isOpenBillAvailable: { // New field
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
       createdAt: {
         allowNull: false,

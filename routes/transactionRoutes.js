@@ -66,4 +66,10 @@ router.post(
   auth([-1]),
   transactionController.transactionFromGuestDevice
 );
+router.post(
+  "/extentFromGuestDevice/:transactionId",
+  auth([-1]),
+  transactionController.extentTransaction
+);
+
 module.exports = router;

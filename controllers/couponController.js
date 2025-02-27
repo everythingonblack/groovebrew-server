@@ -246,7 +246,7 @@ exports.logCouponToUser = async (req, res) => {
     const activeCoupons = await Coupon.findAll({
       where: {
         userId,
-        discountEndDate: { [Sequelize.Op.gt]: new Date() }, // Only active coupons
+        discountEndDate: { [Op.gt]: new Date() }, // Only active coupons
       },
       order: [['discountEndDate', 'DESC']], // Get the most recent active coupon
     });

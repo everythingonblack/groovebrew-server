@@ -83,7 +83,7 @@ exports.updateCafe = async (req, res) => {
     }
 
     const { cafeId } = req.params;
-    const { name, xposition, yposition, scale, fontsize, fontcolor, fontxposition, fontyposition, cafeIdentifyName } = req.body;
+    const { name, xposition, yposition, scale, fontsize, fontcolor, fontxposition, fontyposition, cafeIdentifyName, isQRISavailable, isOpenBillAvailable, isNeedConfirmationState } = req.body;
 
     const qrBackground = req.files["qrBackground"]
       ? req.files["qrBackground"][0].path
@@ -107,6 +107,11 @@ exports.updateCafe = async (req, res) => {
         cafe.fontxposition = fontxposition !== undefined ? fontxposition : cafe.fontxposition;
         cafe.fontyposition = fontyposition !== undefined ? fontyposition : cafe.fontyposition;
 
+        
+        cafe.isQRISavailable = isQRISavailable !== undefined ? isQRISavailable : cafe.isQRISavailable;
+        cafe.isOpenBillAvailable = isOpenBillAvailable !== undefined ? isOpenBillAvailable : cafe.isOpenBillAvailable;
+        cafe.needsConfirmation = isNeedConfirmationState !== undefined ? isNeedConfirmationState : cafe.needsConfirmation;
+
         // Replace spaces in cafeIdentifyName with underscores if it's provided
         cafe.cafeIdentifyName = cafeIdentifyName !== undefined ? cafeIdentifyName.replace(/\s+/g, '_') : cafe.cafeIdentifyName;
 
@@ -122,7 +127,34 @@ exports.updateCafe = async (req, res) => {
   });
 };
 
+exports.getPaymentMethods = async (req, res) => {
+  const { cafeId } = req.params;
 
+  try {
+    const cafe = await Cafe.findByPk(cafeId, {
+      attributes: [
+        'isQRISavailable', 
+        'isOpenBillAvailable', 
+        'needsConfirmation'
+      ]
+    });
+
+    if (!cafe) {
+      return res.status(404).json({ message: 'Cafe not found' });
+    }
+
+    // Send only the specific fields back in the response
+    return res.json({
+      isQRISavailable: cafe.isQRISavailable,
+      isOpenBillAvailable: cafe.isOpenBillAvailable,
+      isNeedConfirmationState: cafe.needsConfirmation
+    });
+    
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
 
 exports.updateCafeWelcomePageConfig = async (req, res) => {
   upload(req, res, async (err) => {

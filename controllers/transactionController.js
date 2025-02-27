@@ -44,7 +44,17 @@ exports.transactionFromClerk = async (req, res) => {
     return res.status(400).json({ error: "Invalid email format" });
   }
 
-  let paymentType = payment_type === "cash" ? "cash" : "cashless";
+  let paymentType = payment_type === "cash" ? "cash" : payment_type === "cashless" ? "cashless" : "paylater";
+
+  if (paymentType === "cashless" && !cafe.isQRISavailable) {
+    return res.status(400).json({ error: "cashless not available" });
+  } else if (payment_type === "paylater" && !cafe.isOpenBillAvailable) {
+    return res.status(400).json({ error: "open bill not available" });
+  } else {
+    // Proceed with the valid payment type
+    console.log("Valid payment type:", paymentType);
+  }
+
   let servingType = serving_type === "pickup" ? "pickup" : "serve";
   let tableId;
 
@@ -150,7 +160,18 @@ exports.transactionFromGuestSide = async (req, res) => {
   const cafe = await Cafe.findByPk(cafeId);
   if (!cafe) return res.status(404).json({ error: "Cafe not found" });
 
-  let paymentType = payment_type === "cash" ? "cash" : "cashless";
+  let paymentType = payment_type === "cash" ? "cash" : payment_type === "cashless" ? "cashless" : "paylater";
+
+  if (paymentType === "cashless" && !cafe.isQRISavailable) {
+    return res.status(400).json({ error: "cashless not available" });
+  } else if (payment_type === "paylater" && !cafe.isOpenBillAvailable) {
+    return res.status(400).json({ error: "open bill not available" });
+  } else {
+    // Proceed with the valid payment type
+    console.log("Valid payment type:", paymentType);
+  }
+
+
   let servingType = serving_type === "pickup" ? "pickup" : "serve";
   let tableId;
 
@@ -262,7 +283,19 @@ exports.transactionFromGuestDevice = async (req, res) => {
 
   const { payment_type, serving_type, tableNo, notes, transactions, socketId } =
     req.body;
-  let paymentType = payment_type == "cash" ? "cash" : "cashless";
+
+  let paymentType = payment_type === "cash" ? "cash" : payment_type === "cashless" ? "cashless" : "paylater";
+
+  if (paymentType === "cashless" && !cafe.isQRISavailable) {
+    return res.status(400).json({ error: "cashless not available" });
+  } else if (payment_type === "paylater" && !cafe.isOpenBillAvailable) {
+    return res.status(400).json({ error: "open bill not available" });
+  } else {
+    // Proceed with the valid payment type
+    console.log("Valid payment type:", paymentType);
+  }
+
+
   let servingType = serving_type == "pickup" ? "pickup" : "serve";
   let tableId;
 
@@ -312,7 +345,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
       const detailedTransactions = transactions.items.map(async (item) => {
         const itemPrice = await Item.findByPk(item.itemId, {
           attributes: ['price', 'promoPrice'],  // Select only the price and promoPrice fields
-        });        
+        });
 
         await DetailedTransaction.create(
           {
@@ -320,7 +353,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
             itemId: item.itemId,
             qty: item.qty,
             price: itemPrice.dataValues.price,
-            promoPrice: itemPrice. dataValues.promoPrice
+            promoPrice: itemPrice.dataValues.promoPrice
           },
           { transaction: t }
         );
@@ -358,6 +391,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
 exports.confirmTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
+  const { notAcceptedItems } = req.body;
   try {
 
     const transaction = await Transaction.findByPk(transactionId, {
@@ -366,6 +400,14 @@ exports.confirmTransaction = async (req, res) => {
           model: Cafe,
           attributes: ['ownerId'], // Only include the ownerId from the Cafe model
         },
+        {
+          model: DetailedTransaction,
+          include: [
+            {
+              model: Item,  // Include the Item model related to DetailedTransaction
+            }
+          ]
+        }
       ],
     });
     if (transaction.confirmed == 3) return;
@@ -400,7 +442,25 @@ exports.confirmTransaction = async (req, res) => {
       userHelper.sendNotifToUserId(transaction.userId, payload);
     }
 
+    // Loop through all detailed transactions and update them based on notAcceptedItems
+    const detailedTransactions = transaction.DetailedTransactions; // Get all related DetailedTransactions for this transaction
+
+    for (let detailedTransaction of detailedTransactions) {
+      if (notAcceptedItems.includes(detailedTransaction.detailedTransactionId)) {
+        // If the item is in notAcceptedItems, set acceptedStatus to -1 and qty to 0
+        detailedTransaction.acceptedStatus = -1;
+        detailedTransaction.qty = 0;
+      } else {
+        // If the item is not in notAcceptedItems, set acceptedStatus to 1
+        detailedTransaction.acceptedStatus = 1;
+      }
+
+      await detailedTransaction.save(); // Save the updated detailedTransaction
+    }
+
+    // Save the updated transaction
     await transaction.save();
+
 
     userHelper.sendMessageToUser(transaction.userId, event, {
       transactionId: transaction.transactionId,
@@ -410,6 +470,92 @@ exports.confirmTransaction = async (req, res) => {
   } catch (error) {
     console.error("Error updating table:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+//to add new item
+exports.extentTransaction = async (req, res) => {
+  const { transactionId } = req.params;
+  const { notes, transactions, socketId } = req.body;
+
+  const transaction = await Transaction.findByPk(transactionId, {
+    include: [
+      {
+        model: DetailedTransaction,
+      }
+    ],
+    attributes: ['transactionId', 'userId', 'cafeId', 'notes'], // Only include the ownerId from the Cafe model
+  });
+
+  if (!transaction) return res.status(404).json({ error: "Transaction not found" });
+  if (transaction.userId != req.user.userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const detailedTransactions = transaction.dataValues.DetailedTransactions;
+console.log(detailedTransactions)
+  const highestAdditionalNumber = Math.max(...detailedTransactions.map(d => d.dataValues.additionalNumber));
+  console.log("aaaaaaaaaaaaaa"+highestAdditionalNumber)
+
+  const cafe = await Cafe.findByPk(transaction.cafeId);
+  if (!cafe) return res.status(404).json({ error: "Cafe not found" });
+
+  let user = { userId: 0 };
+  user.userId = req.user.userId;
+
+  try {
+    await sequelize.transaction(async (t) => {
+      // Add spacing and separator to the notes
+      if (transaction.notes != '') {
+        const formattedNotes = `${transaction.notes}\n-----------------------------\n${notes}`;
+
+        // Update the notes with the new formatted notes
+        transaction.notes = formattedNotes;
+
+        // Save the transaction with the updated notes
+        await transaction.save({ transaction: t });
+      }
+      // Create detailed transaction records
+      const detailedTransactions = transactions.items.map(async (item) => {
+        const itemPrice = await Item.findByPk(item.itemId, {
+          attributes: ['price', 'promoPrice'],  // Select only the price and promoPrice fields
+        });
+
+        await DetailedTransaction.create(
+          {
+            transactionId: transactionId,
+            itemId: item.itemId,
+            qty: item.qty,
+            price: itemPrice.dataValues.price,
+            promoPrice: itemPrice.dataValues.promoPrice,
+            additionalNumber: highestAdditionalNumber + 1
+          },
+          { transaction: t }
+        );
+      });
+
+      // Ensure all detailed transactions are created before committing
+      await Promise.all(detailedTransactions);
+    });
+
+
+    userHelper.sendMessageToAllClerk(transaction.cafeId, "transaction_created", {
+      cafeId: transaction.cafeId,
+      transactionId: transactionId,
+    });
+
+    const event = cafe.needsConfirmation
+      ? "transaction_pending"
+      : "transaction_confirmed";
+    res.status(201).json({
+      message: "Transactions created successfully",
+    });
+
+    userHelper.sendMessageToSocket(socketId, event, {
+      transactionId: transactionId,
+    });
+
+  } catch (error) {
+    console.error("Error creating transactions:", error);
+    res.status(500).json({ message: "Failed to extend transactions" });
   }
 };
 
@@ -441,6 +587,7 @@ exports.cancelTransaction = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
 exports.declineTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
@@ -620,6 +767,7 @@ exports.getTransaction = async (req, res) => {
   }
 };
 
+
 exports.getTransactions = async (req, res) => {
   const { cafeId } = req.params;
   const { demandLength, idsOnly } = req.query;
@@ -643,10 +791,29 @@ exports.getTransactions = async (req, res) => {
 
     // If idsOnly is true, apply the 24-hour filter and only return transactionId
     if (idsOnly === "true") {
-      const twentyFourHoursAgo = moment().subtract(24, 'hours').toDate();
+      // Get the current time in UTC
+      const nowUTC = moment.utc();
+
+      // Calculate the offset for the cafe's timezone (e.g., 'Asia/Jakarta')
+      const offset = moment.tz(cafe.timezone).utcOffset(); // Get offset in minutes
+
+      // Adjust the current UTC time by the offset to get the local time
+      const twentyFourHoursAgo = nowUTC.clone().add(offset, 'minutes').subtract(24, 'hours').toDate();
+
       queryOptions.where.createdAt = { [Op.gte]: twentyFourHoursAgo }; // Filter for last 24 hours
       queryOptions.attributes = ['transactionId']; // Only include transactionId in results
     } else {
+
+      const nowUTC = moment.utc();
+
+      // Calculate the offset for the cafe's timezone (e.g., 'Asia/Jakarta')
+      const offset = moment.tz(cafe.timezone).utcOffset(); // Get offset in minutes
+
+      // Adjust the current UTC time by the offset to get the local time
+      const twentyFourHoursAgo = nowUTC.clone().add(offset, 'minutes').subtract(24, 'hours').toDate();
+
+      queryOptions.where.createdAt = { [Op.gte]: twentyFourHoursAgo }; // Filter for last 24 hours
+
       // If idsOnly is false or not provided, include related models
       queryOptions.include = [
         {
@@ -1269,14 +1436,14 @@ exports.generateReport = async (cafeId, now, cafeTimezone) => {
 
   // Initialize hourly bins for income, outcome, transactions, and materialIds
   const hourlyData = {
-    hour0To3: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour3To6: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour6To9: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour9To12: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour12To15: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour15To18: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour18To21: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
-    hour21To24: { income: 0,promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() }
+    hour0To3: { income: 0, promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour3To6: { income: 0, promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour6To9: { income: 0, promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour9To12: { income: 0, promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour12To15: { income: 0, promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour15To18: { income: 0, promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour18To21: { income: 0, promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() },
+    hour21To24: { income: 0, promoSpend: 0, outcome: 0, transactions: [], materialIds: [], uniqueTransactions: new Set() }
   };
 
   detailedTransactions.forEach(detailedTransaction => {

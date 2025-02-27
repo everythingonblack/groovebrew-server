@@ -38,6 +38,10 @@ router.put(
   cafeController.setIsNeedConfirmation
 ); // Update an item by its ID
 
+router.get(
+  "/get-payment-methods/:cafeId",
+  cafeController.getPaymentMethods
+);
 
 router.get("/check-identifyName/:cafeIdentifyName", cafeController.checkIdentifyName);
 

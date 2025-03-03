@@ -333,7 +333,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
           cafeId: cafeId,
           payment_type: paymentType,
           serving_type: servingType,
-          confirmed: cafe.needsConfirmation ? 0 : 1,
+          confirmed: cafe.needsConfirmation || paymentType == 'paylater' ? 0 : 1,
           tableId: servingType === "serve" ? tableId : null,
           is_paid: false,
           notes: notes != null && notes,
@@ -370,7 +370,7 @@ exports.transactionFromGuestDevice = async (req, res) => {
       cafeId: newTransaction.cafeId,
       transactionId: newTransaction.transactionId,
     });
-    const event = cafe.needsConfirmation
+    const event = cafe.needsConfirmation || paymentType == "paylater"
       ? "transaction_pending"
       : "transaction_confirmed";
     res.status(201).json({

@@ -84,7 +84,7 @@ exports.updateCafe = async (req, res) => {
 
     const { cafeId } = req.params;
     const { name, xposition, yposition, scale, fontsize, fontcolor, fontxposition, fontyposition, cafeIdentifyName, isQRISavailable, isOpenBillAvailable, isNeedConfirmationState } = req.body;
-
+    console.log(req.body)
     const qrBackground = req.files["qrBackground"]
       ? req.files["qrBackground"][0].path
       : null;

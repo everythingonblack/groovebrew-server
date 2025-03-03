@@ -62,7 +62,7 @@ const authController = require("./controllers/authController");
 const { verifyToken } = require("./services/jwtHelper"); // Import the JWT helper
 
 
-const { User, Cafe } = require("./models");
+const { User, Cafe, Coupon } = require("./models");
 
 app.use(express.json());
 
@@ -165,11 +165,49 @@ io.on("connection", async (socket) => {
   socket.on("checkUserToken", async ({ token, shopId }) => {
     try {
       let cafe = null;
+      let isExceededDeadline = false;
       if (shopId) {
         cafe = await Cafe.findOne({
           attributes: ['ownerId'], // Specify the ownerId attribute
           where: { cafeId: shopId } // Use cafeId to find the record
         });
+
+        if (cafe) {
+          // Fetch the latest coupon for the cafe's owner (user)
+          const latestCoupon = await Coupon.findOne({
+            where: { userId: cafe.ownerId }, // Find the coupon related to the cafe owner (userId)
+            order: [['discountEndDate', 'DESC']], // Sort by discountEndDate to get the latest one
+          });
+
+          if (latestCoupon) {
+
+            // Calculate the deadline based on discountPeriods
+            const discountPeriods = latestCoupon.discountPeriods;
+            console.log(discountPeriods)
+            const deadlineInDays = discountPeriods * 3; // Each period is 3 days
+            console.log(deadlineInDays)
+            const calculatedEndDate = moment(latestCoupon.discountEndDate).add(deadlineInDays, 'days'); // Add deadline to the createdAt date
+
+            // Get today's date
+            const today = moment();
+
+            // Check if the coupon's calculated deadline has passed
+            if (today.isAfter(calculatedEndDate)) {
+              console.log('The coupon has exceeded its deadline.');
+              isExceededDeadline = true;
+            } else {
+              console.log('The coupon is still valid.');
+            }
+
+            console.log(`Latest coupon for this cafe owner:`);
+            console.log(latestCoupon);
+            console.log(`Calculated discountEndDate (based on discountPeriods): ${calculatedEndDate.format('YYYY-MM-DD')}`);
+          } else {
+            console.log('No coupon found for this cafe owner.');
+          }
+        } else {
+          console.log('Cafe not found.');
+        }
       }
 
       console.log(`trying to check token` + shopId);
@@ -185,13 +223,13 @@ io.on("connection", async (socket) => {
         spotifyService.getRoomDeviceId(shopId) == null ? true : false;
       // Emit success message or perform any other actions
       socket.join(shopId);
-      socket.emit("joined-room", { shopId, isSpotifyNeedLogin });
+      socket.emit("joined-room", { shopId, isSpotifyNeedLogin, isExceededDeadline });
       console.log("emit to " + shopId + isSpotifyNeedLogin);
 
       const queue = await spotifyService.getQueue(shopId);
 
       setTimeout(function () {
-        socket.emit("updateQueue", {queue: queue || [], getRecommendedMusic: spotifyService.rooms[shopId]?.getRecommendedMusic});
+        socket.emit("updateQueue", { queue: queue || [], getRecommendedMusic: spotifyService.rooms[shopId]?.getRecommendedMusic });
       }, 5000);
     } catch {
       console.log("error" + shopId);
@@ -327,7 +365,7 @@ io.on("connection", async (socket) => {
   });
 
   socket.on('configPlayer', async (data) => {
-    
+
     const { token, shopId, getRecommendedMusic } = data;
 
     // Validate the token
@@ -362,13 +400,13 @@ io.on("connection", async (socket) => {
 
       spotifyService.rooms[shopId].getRecommendedMusic = getRecommendedMusic;
       console.log(spotifyService.rooms[shopId])
-      
+
       // Emit the 'configPlayer' event with success response
-      
+
       socket.emit('configPlayerRes', { status: '200' });
 
       const queue = await spotifyService.getQueue(shopId);
-      return io.to(shopId).emit("updateQueue", {queue, getRecommendedMusic: getRecommendedMusic});
+      return io.to(shopId).emit("updateQueue", { queue, getRecommendedMusic: getRecommendedMusic });
     } catch (error) {
       console.error('Error handling claimPlayer:', error);
       // Emit the 'configPlayer' event with error response
@@ -401,7 +439,7 @@ io.on("connection", async (socket) => {
       socket.emit('authenticated');
       const queue = await spotifyService.getQueue(shopId);
       setTimeout(function () {
-        socket.emit("updateQueue", {queue, getRecommendedMusic: spotifyService.rooms[shopId].getRecommendedMusic});
+        socket.emit("updateQueue", { queue, getRecommendedMusic: spotifyService.rooms[shopId].getRecommendedMusic });
       }, 5000);
     } catch (error) {
       console.error('Error handling claimPlayer:', error);
@@ -461,7 +499,7 @@ io.on("connection", async (socket) => {
     // Decode and verify the token
     try {
       spotifyService.rooms[shopId].queue = editedQueue;
-      io.to(shopId).emit("updateQueue", {queue: editedQueue, getRecommendedMusic: spotifyService.rooms[shopId].getRecommendedMusic});
+      io.to(shopId).emit("updateQueue", { queue: editedQueue, getRecommendedMusic: spotifyService.rooms[shopId].getRecommendedMusic });
     } catch (error) {
       console.error('Error handling claimPlayer:', error);
       // Emit the 'claimPlayerRes' event with error response
@@ -517,7 +555,7 @@ io.on("connection", async (socket) => {
           const queue = await spotifyService.getQueue(shopId);
           console.log("sharing queue" + track);
           console.log(queue)
-          io.to(shopId).emit("updateQueue", {queue});
+          io.to(shopId).emit("updateQueue", { queue });
           console.log(shopId);
           console.log(queue);
         }
@@ -536,7 +574,7 @@ io.on("connection", async (socket) => {
 
         const queue = await spotifyService.getQueue(shopId);
         console.log(queue)
-        io.to(shopId).emit("updateQueue", {queue});
+        io.to(shopId).emit("updateQueue", { queue });
       }
     }
   });
@@ -670,8 +708,8 @@ io.on("connection", async (socket) => {
 
     io.to(shopId).emit("updateRecommendation", recommended?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs[0]?.tabRenderer?.content?.musicQueueRenderer?.content?.playlistPanelRenderer?.contents[randomNumber]);
 
-      
-    
+
+
   });
   socket.on("disconnect", () => {
     console.log("Client disconnected");

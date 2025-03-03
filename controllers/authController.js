@@ -1,5 +1,5 @@
 const bcrypt = require("bcrypt");
-const { User } = require("../models");
+const { Sequelize, User, Transaction, DetailedTransaction } = require("../models");
 const { generateToken, verifyToken } = require("../services/jwtHelper"); // Import the JWT helper
 const userHelper = require("../services/userHelper");
 
@@ -45,14 +45,33 @@ exports.checkTokenSocket = async (socket, token, shopIdThatOwnerOpen, ownerId) =
     // At this point, userPayload contains the user data decoded from the JWT
     // You can use this data to update the socket's user information
     const { userId, username, roleId, cafeId } = userPayload;
+    let latestOpenBillTransaction = null;
+    console.log(cafeId + "==============" + userId + ownerId)
 
+    if (shopIdThatOwnerOpen && cafeId == null && userId != ownerId) {
+      latestOpenBillTransaction = await Transaction.findOne({
+        where: {
+          userId: userId,
+          payment_type: 'paylater',
+          confirmed: 1,
+          is_paid: false
+        },
+        include: [
+          {
+            model: DetailedTransaction,
+          }
+        ],
+        order: [['createdAt', 'DESC']], // Sort by createdAt to get the latest one
+      });
+    }
+    console.log(latestOpenBillTransaction)
     // Update the user socket information if necessary (You could use a userHelper for this as before)
     userHelper.updateUserSocketId({ userId, username, roleId, cafeId }, socket.id, shopIdThatOwnerOpen);
 
     return socket.emit("checkUserTokenRes", {
       status: 200,
       message: "Token validated successfully",
-      data: { user: {userId, username, roleId, cafeId}, isTheOwner: user.userId == ownerId }
+      data: { user: { userId, username, roleId, cafeId }, isTheOwner: user.userId == ownerId, latestOpenBillTransaction: latestOpenBillTransaction }
     });
   } catch (error) {
     console.error("Error validating token via socket:", error);

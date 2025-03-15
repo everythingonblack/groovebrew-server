@@ -72,4 +72,10 @@ router.post(
   transactionController.extentTransaction
 );
 
+router.post(
+  "/closeBillFromGuestDevice/:transactionId",
+  auth([-1]),
+  transactionController.closeBillFromGuestDevice
+);
+
 module.exports = router;

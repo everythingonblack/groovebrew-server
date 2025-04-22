@@ -163,7 +163,7 @@ exports.updateCafeWelcomePageConfig = async (req, res) => {
     }
 
     const { cafeId } = req.params;
-    const { isWelcomePageActive, welcomingText, backgroundColor, textColor } =
+    const { isWelcomePageActive, welcomingText, backgroundColor, textColor, musicFilter } =
       req.body;
     console.log(req.body);
 
@@ -196,6 +196,8 @@ exports.updateCafeWelcomePageConfig = async (req, res) => {
           textColor !== undefined ? textColor : welcomePageConfig.textColor;
         welcomePageConfig.image =
           imageFile !== null ? imageFile : welcomePageConfig.image;
+        welcomePageConfig.musicFilter =
+          musicFilter !== null ? musicFilter : welcomePageConfig.musicFilter;
 
         // Save updated configuration as a string
         cafe.welcomePageConfig = JSON.stringify(welcomePageConfig);

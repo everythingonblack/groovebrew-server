@@ -24,7 +24,7 @@ const auth = (requiredRoles = null) => {
         decoded = verifyToken(token);
 
         if (!decoded) {
-          throw new Error("Invalid session or session has expired");
+          // throw new Error("Invalid session or session has expired");
         }
 
         user = await User.findByPk(decoded.userId);

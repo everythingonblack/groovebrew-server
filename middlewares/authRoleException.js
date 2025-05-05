@@ -18,7 +18,7 @@ const authRoleException = (exceptionRoles = []) => {
       });
 
       if (!session) {
-        throw new Error("Invalid session or session has expired");
+        // throw new Error("Invalid session or session has expired");
       }
 
       const user = await User.findByPk(session.userId);

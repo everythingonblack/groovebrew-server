@@ -121,7 +121,7 @@ app.get('/image', async (req, res) => {
     const response = await nodefetch(imageUrl);
 
     if (!response.ok) {
-      throw new Error('Failed to fetch the image');
+      // throw new Error('Failed to fetch the image');
     }
 
     // Set the content type from the fetched image's content type

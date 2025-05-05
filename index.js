@@ -17,7 +17,22 @@ dotenv.config({
 });
 
 const app = express();
-app.use(cors());
+
+const corsOptions = {
+  origin: [
+    process.env.FRONTEND_URI,
+    process.env.FRONTEND_TEST_URI,
+    process.env.FRONTEND_PLAYER_URI,
+    process.env.FRONTEND_PLAYER_TEST_URI,
+    'http://localhost:3000',
+    'http://localhost:3001',
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Add more methods as needed
+  credentials: true, // Allow credentials (cookies, authorization headers, etc.)
+};
+
+// Use CORS middleware
+app.use(cors(corsOptions));
 
 const server = http.createServer(app);
 const io = socketIo(server, {
@@ -25,10 +40,11 @@ const io = socketIo(server, {
     origin: (origin, callback) => {
       const allowedOrigins = [
         process.env.FRONTEND_URI,
+        process.env.FRONTEND_TEST_URI,
+        process.env.FRONTEND_PLAYER_URI,
+        process.env.FRONTEND_PLAYER_TEST_URI,
         'http://localhost:3000',
         'http://localhost:3001',
-        '*',
-        process.env.FRONTEND_PLAYER_URI,
       ];
       if (allowedOrigins.includes(origin) || !origin) {
         callback(null, true); // Allow the request

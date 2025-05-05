@@ -144,7 +144,7 @@ class SpotifyService {
 
   async refreshAccessToken(roomId) {
     const refresh_token = this.rooms[roomId]?.refresh_token;
-    if (!refresh_token) throw new Error("No refresh token available");
+    if (!refresh_token) console.log('no access token')
     const response = await axios.post(
       "https://accounts.spotify.com/api/token",
       new URLSearchParams({
@@ -222,7 +222,7 @@ class SpotifyService {
       });
 
       if (!response.ok) {
-        throw new Error('Network response was not ok ' + response.statusText);
+        // throw new Error('Network response was not ok ' + response.statusText);
       }
 
       const data = await response.json();
@@ -636,7 +636,7 @@ class SpotifyService {
       }
     } catch (error) {
       // malas baca console.error('Error removing from queue:', error);
-      throw error;
+      // throw error;
     }
   }
 
@@ -723,7 +723,7 @@ console.log(JSON.stringify(room.queue))
       }
     } catch (error) {
       console.error('Error voting for song:', error);
-      throw error;
+      // throw error;
     }
   }
 
@@ -747,7 +747,7 @@ console.log(JSON.stringify(room.queue))
       return this.rooms[roomId].access_token || "";
     } catch (error) {
       console.error("Error getting room access token:", error);
-      throw error;
+      // throw error;
     }
   }
 
@@ -768,7 +768,7 @@ console.log(JSON.stringify(room.queue))
       return null;
     } catch (error) {
       console.error("Error getting room device ID:", error);
-      throw error;
+      // throw error;
     }
   }
 
@@ -805,7 +805,7 @@ console.log(JSON.stringify(room.queue))
       }
     } catch (error) {
       console.error("Error fetching lyrics:", error);
-      throw error;
+      // throw error;
     }
   }
 }

@@ -15,7 +15,7 @@ const findMusixmatchTracks = async (spotifyTrackName, spotifyArtist) => {
         });
 
         if (response.data.message.header.status_code !== 200) {
-            throw new Error('Failed to fetch tracks from Musixmatch');
+            // throw new Error('Failed to fetch tracks from Musixmatch');
         }
 
         return response.data.message.body.track_list.map(track => ({
@@ -25,7 +25,7 @@ const findMusixmatchTracks = async (spotifyTrackName, spotifyArtist) => {
         }));
     } catch (error) {
         console.error('Error fetching tracks from Musixmatch:', error);
-        throw error;
+        // throw error;
     }
 };
 
@@ -63,13 +63,13 @@ const getMusixmatchSubtitle = async (musixmatchTrackId) => {
         });
 
         if (response.data.message.header.status_code !== 200) {
-            throw new Error('Failed to fetch subtitle from Musixmatch' + response.data.message);
+            // throw new Error('Failed to fetch subtitle from Musixmatch' + response.data.message);
         }
 
         return response.data.message.body.subtitle.subtitle_body;
     } catch (error) {
         console.error('Error fetching subtitle from Musixmatch:', error);
-        throw error;
+        // throw error;
     }
 };
 
@@ -80,7 +80,7 @@ const completeWorkflow = async (trackName, trackArtist) => {
         const bestMatch = await findBestMatchInMusixmatch(trackName, trackArtist, musixmatchTracks);
 
         if (!bestMatch) {
-            throw new Error('No suitable match found in Musixmatch');
+            // throw new Error('No suitable match found in Musixmatch');
         }
 
         const musixmatchTrackId = bestMatch.track_id;
@@ -92,7 +92,7 @@ const completeWorkflow = async (trackName, trackArtist) => {
         return { bestMatch, subtitle };
     } catch (error) {
         console.error('Error completing workflow:', error);
-        throw error;
+        // throw error;
     }
 };
 

@@ -1898,7 +1898,7 @@ async function getReportt(cafeId, filter, getAll = true) {
       break;
 
     default:
-      throw new Error("Invalid filter");
+      // throw new Error("Invalid filter");
   }
 
   // Fetch current report data

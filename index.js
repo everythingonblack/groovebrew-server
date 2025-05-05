@@ -9,6 +9,9 @@ const querystring = require("querystring");
 const webpush = require("web-push");
 const bcrypt = require("bcrypt");
 
+const nodefetch = require('node-fetch'); // Use node-fetch for making HTTP requests
+
+
 const moment = require("moment");
 
 // Load environment variables once, based on NODE_ENV
@@ -103,6 +106,35 @@ app.post("/subscribe", (req, res) => {
   console.log("subscribing" + subscription + " " + token);
   res.status(201).json({});
 });
+
+
+
+app.get('/image', async (req, res) => {
+  const imageUrl = req.query.url;  // Get the image URL from query parameter
+
+  if (!imageUrl) {
+    return res.status(400).json({ error: 'No image URL provided.' });
+  }
+
+  try {
+    // Fetch the image from the URL
+    const response = await nodefetch(imageUrl);
+
+    if (!response.ok) {
+      // throw new Error('Failed to fetch the image');
+    }
+
+    // Set the content type from the fetched image's content type
+    res.set('Content-Type', response.headers.get('Content-Type'));
+    
+    // Stream the image content directly to the client
+    response.body.pipe(res);
+  } catch (error) {
+    console.error('Error fetching the image:', error);
+    res.status(500).json({ error: 'Failed to fetch the image.' });
+  }
+});
+
 
 function generateRandomString(length) {
   return Array.from({ length }, () => {
@@ -393,6 +425,8 @@ io.on("connection", async (socket) => {
     // Decode and verify the token
     try {
       const decoded = verifyToken(token); // Decodes the token (throws error if invalid)
+      
+      console.log(decoded)
       const user = await User.findByPk(decoded.userId); // Assuming User is your Sequelize model
       const cafe = await Cafe.findByPk(shopId); // Assuming User is your Sequelize model
 
@@ -404,7 +438,7 @@ io.on("connection", async (socket) => {
 
       // Parse existing configuration
       let welcomePageConfig = cafe.welcomePageConfig
-        ? JSON.parse(cafe.welcomePageConfig)
+        ? JSON.parse(cafe.welcomePageConfig) || {}
         : {};
 
       // Update configuration
@@ -557,6 +591,68 @@ io.on("connection", async (socket) => {
       socket.emit('searchResponse', []);
     }
   });
+  
+async function checkTrack(trackData, filter) {
+  // Gabungkan trackData dan filter ke dalam prompt
+  const prompt = `
+    Saya akan memberikan data lagu dan filter, tolong periksa apakah lagu tersebut lolos filter.
+    Data lagu: 
+    Nama: ${trackData.name}, 
+    Artist: ${trackData.artist}, 
+    Durasi: ${trackData.length}, 
+    Track ID: ${trackData.trackId}
+    Filter: ${filter}
+
+    Jawab hanya dengan {success: boolean, alasan: text}.
+    berikan alasan hanya dengan raw text.
+    alasan tidak lebih dari 13 kata.
+    Jika lagu lolos filter maka return true, jika tidak, return false.
+    Jika tidak lolos filter, sertakan alasan dengan format: "kafe ini tidak dapat memutar (alasan yang terfilter)".
+  `;
+
+  const apiKey = 'AIzaSyAUMuISZEx_dwGak0rA0CxyJ1HUNUUNfEg'; // Ganti dengan API Key Gemini Anda
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  const requestBody = {
+    contents: [
+      {
+        parts: [
+          {
+            text: prompt // Mengirimkan prompt yang sudah digabungkan dengan trackData dan filter
+          }
+        ]
+      }
+    ]
+  };
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    const data = await response.json();
+    console.log(JSON.stringify(data))
+    // Ambil teks hasil jawaban dari model
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // Bersihkan string markdown ```json ... ```
+    const cleaned = rawText.replace(/```json|```/g, '').trim();
+
+    // Parse ke JSON
+    const result = JSON.parse(cleaned);
+
+    console.log('Success:', result.success);
+    console.log('Alasan:', result.alasan);
+    return result;
+  } catch (error) {
+    console.error('Error:', error);
+    return {success: false}
+  }
+}
 
   socket.on("songRequest", async (data) => {
     const { token, shopId, track } = data;
@@ -565,6 +661,23 @@ io.on("connection", async (socket) => {
       const decoded = verifyToken(token);
       if (decoded) {
         const user = await User.findByPk(decoded.userId);
+        const cafe = await Cafe.findOne({
+          attributes: ['welcomePageConfig'], // Specify the ownerId attribute
+          where: { cafeId: shopId } // Use cafeId to find the record
+        });
+
+        let welcomePageConfig = cafe.welcomePageConfig
+          ? JSON.parse(cafe.welcomePageConfig) || {}
+          : {};
+        
+        if(welcomePageConfig.musicFilter != ''){
+          const filterwithAI = await checkTrack(track, welcomePageConfig.musicFilter)
+          
+          socket.emit('requestResponse', filterwithAI);
+          if(!filterwithAI.success) return;
+        }
+
+        console.log("AAAAAAAA")
         if (user) {
           spotifyService.addToQueue(shopId, user.userId, track);
 

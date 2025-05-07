@@ -53,7 +53,7 @@ exports.createCoupon = async (req, res) => {
     // You can replace fetch with a more appropriate async task
     // If you need to do something with the HTML (for example, fetch a preview)
     try {
-      const res =  await fetch(`https://dev.coupon.kedaimaster.com/coupon?couponCode=${couponCode}&discountType=${discountType}&discountValue=${discountValue}&expirationDate=${expirationDate}&discountPeriods=${discountPeriods}`, {
+      const res =  await fetch(`https://coupon.kedaimaster.com/coupon?couponCode=${couponCode}&discountType=${discountType}&discountValue=${discountValue}&expirationDate=${expirationDate}&discountPeriods=${discountPeriods}`, {
         method: 'POST',  // Specify that this is a POST request
         headers: {
           'Content-Type': 'application/json',  // Indicate that we're sending JSON
@@ -178,7 +178,7 @@ exports.createUserWithCoupon = async (req, res) => {
 
     // Optionally post something to an external service (e.g., your coupon URL)
     try {
-      fetch(`https://dev.coupon.kedaimaster.com/coupon?couponCode=${decryptedCode}`, {
+      fetch(`https://coupon.kedaimaster.com/coupon?couponCode=${decryptedCode}`, {
         method: 'DELETE',  // Specify that this is a POST request
         headers: {
           'Content-Type': 'application/json',  // Indicate that we're sending JSON

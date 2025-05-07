@@ -1,9 +1,12 @@
 const { User } = require("../models");
+const { Op, fn, col, where } = require('sequelize');
 
 async function checkAvailability(username, email) {
   if (username !== null) {
-    const existingUser = await User.findOne({ where: { username } });
-
+    const existingUser = await User.findOne({
+      where: where(fn('LOWER', col('username')), username.toLowerCase())
+    });
+    
     if (existingUser) {
       return {
         status: 400,

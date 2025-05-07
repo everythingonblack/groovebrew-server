@@ -24,9 +24,7 @@ const app = express();
 const corsOptions = {
   origin: [
     process.env.FRONTEND_URI,
-    process.env.FRONTEND_TEST_URI,
     process.env.FRONTEND_PLAYER_URI,
-    process.env.FRONTEND_PLAYER_TEST_URI,
     'http://localhost:3000',
     'http://localhost:3001',
   ],

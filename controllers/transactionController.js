@@ -2441,11 +2441,20 @@ exports.getAnalytics = async (req, res) => {
     // Step 1: Handle tenant-level analytics (roleId == 0)
     if (req.user.roleId === 0) {
       await getAllTenantReports(req, res);
-    } else if (req.user.roleId === 1) {
-      // Step 2: Fetch cafes belonging to the owner (roleId == 1)
-      const cafes = await Cafe.findAll({
-        where: { ownerId: req.user.userId },
-      });
+    } else if (req.user.roleId === 1 || req.user.roleId === 2) {
+      let cafes;
+    
+      if (req.user.roleId === 1) {
+        // Owner: fetch all cafes owned by the user
+        cafes = await Cafe.findAll({
+          where: { ownerId: req.user.userId },
+        });
+      } else if (req.user.roleId === 2) {
+        // Manager: fetch the specific cafe assigned to the user
+        cafes = await Cafe.findAll({
+          where: { cafeId: req.user.cafeId },
+        });
+      }
 
       let totalPromoSpend = 0; // Initialize total income counter
       let income = 0; // Initialize total income counter

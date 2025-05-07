@@ -1,5 +1,5 @@
 const bcrypt = require("bcrypt");
-const { Sequelize, User, Transaction, DetailedTransaction } = require("../models");
+const { Sequelize, User, Transaction, DetailedTransaction, Cafe } = require("../models");
 const { generateToken, verifyToken } = require("../services/jwtHelper"); // Import the JWT helper
 const userHelper = require("../services/userHelper");
 
@@ -12,12 +12,20 @@ exports.login = async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
+    let cafe;
 
+    if(user.roleId == 2) {
+      cafe = await Cafe.findOne({
+        where: {
+          cafeId: user.cafeId,
+        },
+      });
+    }
     // Generate JWT token
     const token = generateToken(user);
 
     // Respond with the token and any necessary user details
-    res.json({ token, cafeId: user.cafeId });
+    res.json({ token, cafeId: user.cafeId, cafeIdentifyName: cafe?.dataValues.cafeIdentifyName });
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -64,14 +72,22 @@ exports.checkTokenSocket = async (socket, token, shopIdThatOwnerOpen, ownerId) =
         order: [['createdAt', 'DESC']], // Sort by createdAt to get the latest one
       });
     }
+    let cafe = null;
+    if(roleId == 2) {
+      cafe = await Cafe.findOne({
+        where: {
+          cafeId: cafeId,
+        },
+      });
+    }
     console.log(latestOpenBillTransaction)
     // Update the user socket information if necessary (You could use a userHelper for this as before)
     userHelper.updateUserSocketId({ userId, username, roleId, cafeId }, socket.id, shopIdThatOwnerOpen);
-
+    
     return socket.emit("checkUserTokenRes", {
       status: 200,
       message: "Token validated successfully",
-      data: { user: { userId, username, roleId, cafeId }, isTheOwner: user.userId == ownerId, latestOpenBillTransaction: latestOpenBillTransaction }
+      data: { user: { userId, username, roleId, cafeId, cafeIdentityName: cafe?.dataValues.cafeIdentifyName }, isTheOwner: user.userId == ownerId, latestOpenBillTransaction: latestOpenBillTransaction }
     });
   } catch (error) {
     console.error("Error validating token via socket:", error);

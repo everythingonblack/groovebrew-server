@@ -44,17 +44,22 @@ module.exports = (sequelize, DataTypes) => {
       price: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        default: 0,
+        defaultValue: 0,
       },
-      promoPrice: { // New field added
+      promoPrice: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        default: null,
+        defaultValue: null,
       },
       availability: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: true,
+      },
+      willBeDeleted: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
     },
     {

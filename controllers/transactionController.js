@@ -98,15 +98,18 @@ exports.transactionFromClerk = async (req, res) => {
         { transaction: t }
       );
 
-      // Create detailed transaction records
       const detailedTransactions = transactions.items.map(async (item) => {
+        const itemPrice = await Item.findByPk(item.itemId, {
+          attributes: ['price', 'promoPrice'],  // Select only the price and promoPrice fields
+        });
+
         await DetailedTransaction.create(
           {
             transactionId: newTransaction.transactionId,
             itemId: item.itemId,
             qty: item.qty,
-            price: item.price,
-            promoPrice: item.promoPrice
+            price: itemPrice.dataValues.price,
+            promoPrice: itemPrice.dataValues.promoPrice
           },
           { transaction: t }
         );
@@ -134,6 +137,11 @@ exports.transactionFromClerk = async (req, res) => {
           );
         }
       }
+
+      userHelper.sendMessageToAllClerk(cafeId, "transaction_created", {
+        cafeId: newTransaction.cafeId,
+        transactionId: newTransaction.transactionId,
+      });
     });
 
     res.status(201).json({ message: "Transactions created successfully" });
@@ -491,9 +499,9 @@ exports.extentTransaction = async (req, res) => {
   if (!req.user || transaction.userId != req.user.userId) return res.status(401).json({ error: "Unauthorized" });
 
   const detailedTransactions = transaction.dataValues.DetailedTransactions;
-console.log(detailedTransactions)
+  console.log(detailedTransactions)
   const highestAdditionalNumber = Math.max(...detailedTransactions.map(d => d.dataValues.additionalNumber));
-  console.log("aaaaaaaaaaaaaa"+highestAdditionalNumber)
+  console.log("aaaaaaaaaaaaaa" + highestAdditionalNumber)
 
   const cafe = await Cafe.findByPk(transaction.cafeId);
   if (!cafe) return res.status(404).json({ error: "Cafe not found" });
@@ -1898,7 +1906,7 @@ async function getReportt(cafeId, filter, getAll = true) {
       break;
 
     default:
-      // throw new Error("Invalid filter");
+    // throw new Error("Invalid filter");
   }
 
   // Fetch current report data
@@ -2443,7 +2451,7 @@ exports.getAnalytics = async (req, res) => {
       await getAllTenantReports(req, res);
     } else if (req.user.roleId === 1 || req.user.roleId === 2) {
       let cafes;
-    
+
       if (req.user.roleId === 1) {
         // Owner: fetch all cafes owned by the user
         cafes = await Cafe.findAll({

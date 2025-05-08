@@ -283,6 +283,26 @@ exports.setAvailability = async (req, res) => {
   }
 };
 
+exports.setDeletionStatus = async (req, res) => {
+  const { itemId } = req.params;
+  const { willBeDeleted } = req.body;
+
+  try {
+    const item = await Item.findByPk(itemId);
+    const cafe = await Cafe.findByPk(item.cafeId);
+    console.log(item);
+    console.log(cafe);
+    if (item.cafeId == req.user.cafeId || req.user.userId == cafe.ownerId) {
+      item.willBeDeleted = willBeDeleted;
+      await item.save();
+      res.status(201).json(item);
+    } else return res.status(201).json(item);
+  } catch (error) {
+    console.error("Error creating cafe:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 exports.deleteItemType = async (req, res) => {
   const { itemTypeId } = req.params;
 

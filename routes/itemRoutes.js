@@ -26,6 +26,12 @@ router.put(
   itemController.setAvailability
 ); // Update an item by its ID
 
+router.put(
+  "/set-deletion/:itemId",
+  auth([1, 2]),
+  itemController.setDeletionStatus
+); // Update an item by its ID
+
 // Item type routes
 router.get("/getItemType/:cafeId", itemController.getItemType); // Get all item types for a specific cafe
 router.post(

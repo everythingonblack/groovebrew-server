@@ -14,14 +14,14 @@ router.post("/get-cafe/:cafeId", cafeController.getCafeById);
 router.post("/create-cafe", auth([1]), cafeController.createCafe);
 router.put(
   "/set-cafe/:cafeId",
-  auth([1]),
+  auth([1,2]),
   checkCafeOwnership,
   cafeController.updateCafe
 );
 
 router.post(
   "/welcome-config/:cafeId",
-  auth([1]),
+  auth([1,2]),
   checkCafeOwnership,
   cafeController.updateCafeWelcomePageConfig
 );
@@ -34,7 +34,7 @@ router.post(
 
 router.put(
   "/confirmation-status/:cafeId",
-  auth([1]),
+  auth([1,2]),
   cafeController.setIsNeedConfirmation
 ); // Update an item by its ID
 

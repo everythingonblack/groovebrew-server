@@ -25,6 +25,8 @@ const corsOptions = {
   origin: [
     process.env.FRONTEND_URI,
     process.env.FRONTEND_PLAYER_URI,
+    process.env.FRONTEND_TEST_URI,
+    process.env.FRONTEND_PLAYER_TEST_URI,
     'http://localhost:3000',
     'http://localhost:3001',
   ],
@@ -1092,6 +1094,8 @@ const {
   generateReport
 } = require("./controllers/transactionController");
 
+const {deleteItemsMarkedForDeletion} = require("./controllers/itemController");
+
 // Schedule a task to run every day at midnight
 // cron.schedule("04 07 * * *", async () => {
 //   console.log("Running daily report generation for all cafes...");
@@ -1140,6 +1144,8 @@ cron.schedule(cronExpression, async () => {
         // Generate the daily report for this cafe at manipulated UTC time
         await generateReport(cafe.cafeId, localTime, cafeTimezone);
         console.log(`Daily report generated for cafe ${cafe.name} at manipulated UTC time ${manipulatedUTC.format()}`);
+        await deleteItemsMarkedForDeletion(cafe.cafeId);
+
       }
     }
   } catch (error) {

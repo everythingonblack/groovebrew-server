@@ -740,6 +740,30 @@ exports.confirmIsCashlessPaidTransaction = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+exports.checkIsMyTransaction = async (req, res) => {
+  const { transactionId } = req.params;
+  if(!req.user) return res.status(200).json({ isMyTransaction: false });
+ 
+  const userId = req.user.userId;
+
+  try {
+    const transaction = await Transaction.findOne({
+      where: { transactionId: transactionId && confirmed < 2 },
+      attributes: ['userId'], // Only select what's necessary
+    });
+
+    if (!transaction) {
+      res.status(200).json({ isMyTransaction: false });
+    }
+
+    const isMyTransaction = transaction.userId === userId;
+
+    res.status(200).json({ isMyTransaction });
+  } catch (error) {
+    console.error("Error fetching transaction:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 
 exports.getMyTransactions = async (req, res) => {
   try {
@@ -771,6 +795,13 @@ exports.getMyTransactions = async (req, res) => {
 
       result[cafeId].transactions.push({
         transactionId: transaction.transactionId,
+        confirmed: transaction.confirmed,
+        payment_type: transaction.payment_type,
+        serving_type: transaction.serving_type,
+        is_paid: transaction.is_paid,
+        paymentClaimed: transaction.paymentClaimed,
+        notes: transaction.notes,
+        tableId: transaction.tableId,
         detailedTransactions: transaction.DetailedTransactions, // Assuming DetailedTransactions is the association name
       });
 
@@ -2094,7 +2125,6 @@ async function getReportt(cafeId, filter, getAll = true) {
 
   };
 };
-
 
 
 

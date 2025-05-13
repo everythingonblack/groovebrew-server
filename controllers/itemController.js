@@ -100,6 +100,23 @@ exports.getItemById = async (req, res) => {
   }
 };
 
+exports.deleteItemsMarkedForDeletion = async (cafeId) => {
+  try {
+    const deletedCount = await Item.destroy({
+      where: {
+        cafeId,
+        willBeDeleted: true,
+      },
+    });
+
+    return { deletedCount };
+  } catch (error) {
+    console.error("Error deleting items marked for deletion:", error);
+    throw new Error("Failed to delete items");
+  }
+};
+
+
 // Update an item
 exports.updateItem = async (req, res) => {
   upload(req, res, async (err) => {
@@ -320,6 +337,7 @@ exports.deleteItemType = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
 exports.getItemTypesWithItems = async (req, res) => {
   const { cafeIdentifyName } = req.params;
 
@@ -339,19 +357,21 @@ exports.getItemTypesWithItems = async (req, res) => {
       cafeId: cafe.cafeId,
     };
 
-    // Only add visibility if not fetching all
     if (!getAll) {
       whereClause.visibility = true;
     }
+
     const itemTypes = await ItemType.findAll({
       where: whereClause,
       include: [
         {
           model: Item,
           as: "itemList",
+          where: getAll ? undefined : { willBeDeleted: false }, // 🔥 Filter items only if not getAll
+          required: false, // Still include ItemType even if no matching items
         },
       ],
-      order: [['order', 'ASC']], // Explicitly order by the 'order' column
+      order: [["order", "ASC"]],
     });
 
     res.status(200).json({ cafe, data: itemTypes });
@@ -360,6 +380,7 @@ exports.getItemTypesWithItems = async (req, res) => {
     res.status(500).json({ error: "Failed to retrieve item types with items" });
   }
 };
+
 
 exports.getCartDetails = async (req, res) => {
   const { cafeId } = req.params;

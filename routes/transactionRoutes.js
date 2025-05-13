@@ -17,6 +17,11 @@ router.get(
   transactionController.getTransaction
 );
 router.get(
+  "/check-is-my-transaction/:transactionId",
+  auth([]),
+  transactionController.checkIsMyTransaction
+);
+router.get(
   "/get-my-transactions",
   auth([]),
   transactionController.getMyTransactions

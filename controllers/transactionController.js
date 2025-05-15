@@ -484,7 +484,7 @@ exports.confirmTransaction = async (req, res) => {
 //to add new item
 exports.extentTransaction = async (req, res) => {
   const { transactionId } = req.params;
-  const { notes, transactions, socketId } = req.body;
+  const { notes, transactions, socketId, payment_type } = req.body;
 
   const transaction = await Transaction.findByPk(transactionId, {
     include: [
@@ -512,6 +512,7 @@ exports.extentTransaction = async (req, res) => {
   try {
     await sequelize.transaction(async (t) => {
       // Add spacing and separator to the notes
+      transaction.payment_type = payment_type;
       if (transaction.notes != '') {
         const formattedNotes = `${transaction.notes}\n-----------------------------\n${notes}`;
 
@@ -519,8 +520,9 @@ exports.extentTransaction = async (req, res) => {
         transaction.notes = formattedNotes;
 
         // Save the transaction with the updated notes
-        await transaction.save({ transaction: t });
       }
+      transaction.updatedAt = new Date();
+      await transaction.save({ transaction: t });
       // Create detailed transaction records
       const detailedTransactions = transactions.items.map(async (item) => {
         const itemPrice = await Item.findByPk(item.itemId, {
@@ -619,35 +621,6 @@ exports.closeBillFromGuestDevice = async (req, res) => {
   }
 };
 
-exports.cancelTransaction = async (req, res) => {
-  const { transactionId } = req.params;
-
-  try {
-    const transaction = await Transaction.findByPk(transactionId);
-    console.log(transaction);
-    if (transaction.userId != req.user.userId)
-      return res.status(401).json({ error: "Unauthorized" });
-    transaction.confirmed = -2;
-    await transaction.save();
-
-    userHelper.sendMessageToAllClerk(
-      transaction.cafeId,
-      "transaction_canceled",
-      {
-        transactionId: transaction.transactionId,
-      }
-    );
-    userHelper.sendMessageToUser(transaction.userId, "transaction_canceled", {
-      transactionId: transaction.transactionId,
-    });
-
-    res.status(200).json(transaction);
-  } catch (error) {
-    console.error("Error updating table:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
 exports.declineTransaction = async (req, res) => {
   const { transactionId } = req.params;
 
@@ -667,16 +640,30 @@ exports.declineTransaction = async (req, res) => {
       ],
     });
 
+    if (transaction.cafeId == req.user.cafeId || transaction.Cafe.dataValues.ownerId == req.user.userId) {
+      transaction.confirmed = -1;
+      await transaction.save();
 
-    if (transaction.cafeId != req.user.cafeId && transaction.Cafe.dataValues.ownerId != req.user.userId)
-      return res.status(401).json({ error: "Unauthorized" });
+      userHelper.sendMessageToUser(transaction.userId, "transaction_failed", {
+        transactionId: transaction.transactionId,
+      });
+    }
+    else if (transaction.userId == req.user.userId) {
+      transaction.confirmed = -2;
+      await transaction.save();
 
-    transaction.confirmed = -1;
-    await transaction.save();
-
-    userHelper.sendMessageToUser(transaction.userId, "transaction_failed", {
-      transactionId: transaction.transactionId,
-    });
+      userHelper.sendMessageToAllClerk(
+        transaction.cafeId,
+        "transaction_canceled",
+        {
+          transactionId: transaction.transactionId,
+        }
+      );
+      userHelper.sendMessageToUser(transaction.userId, "transaction_failed", {
+        transactionId: transaction.transactionId,
+      });
+    }
+    else return res.status(401).json({ error: "Unauthorized" });
 
     res.status(200).json(transaction);
   } catch (error) {
@@ -742,8 +729,8 @@ exports.confirmIsCashlessPaidTransaction = async (req, res) => {
 };
 exports.checkIsMyTransaction = async (req, res) => {
   const { transactionId } = req.params;
-  if(!req.user) return res.status(200).json({ isMyTransaction: false });
- 
+  if (!req.user) return res.status(200).json({ isMyTransaction: false });
+
   const userId = req.user.userId;
 
   try {
@@ -875,13 +862,14 @@ exports.getTransactions = async (req, res) => {
     const limit = parseInt(demandLength, 10);
 
     // Prepare the query options
-    const queryOptions = {
-      where: { cafeId: cafeId },
-      order: [["updatedAt", "DESC"]], // Sort by creation date, descending
-    };
+    let queryOptions = {};
 
     // If idsOnly is true, apply the 24-hour filter and only return transactionId
     if (idsOnly === "true") {
+      queryOptions = {
+        where: { cafeId: cafeId },
+        order: [["updatedAt", "DESC"]], // Sort by creation date, descending
+      };
       // Get the current time in UTC
       const nowUTC = moment.utc();
 
@@ -894,7 +882,10 @@ exports.getTransactions = async (req, res) => {
       queryOptions.where.createdAt = { [Op.gte]: twentyFourHoursAgo }; // Filter for last 24 hours
       queryOptions.attributes = ['transactionId']; // Only include transactionId in results
     } else {
-
+      queryOptions = {
+        where: { cafeId: cafeId },
+        order: [["createdAt", "DESC"]], // Sort by creation date, descending
+      };
       const nowUTC = moment.utc();
 
       // Calculate the offset for the cafe's timezone (e.g., 'Asia/Jakarta')

@@ -43,14 +43,10 @@ router.post(
 );
 router.post(
   "/decline-transaction/:transactionId",
-  auth([1, 2]),
+  auth([]),
   transactionController.declineTransaction
 );
-router.post(
-  "/cancel-transaction/:transactionId",
-  auth([]),
-  transactionController.cancelTransaction
-);
+
 //if buyer is claim has paid the transaction
 router.post(
   "/claim-transaction/:transactionId",

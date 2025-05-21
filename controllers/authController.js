@@ -14,7 +14,7 @@ exports.login = async (req, res) => {
     }
     let cafe;
 
-    if(user.roleId == 2) {
+    if (user.roleId == 2) {
       cafe = await Cafe.findOne({
         where: {
           cafeId: user.cafeId,
@@ -60,8 +60,10 @@ exports.checkTokenSocket = async (socket, token, shopIdThatOwnerOpen, ownerId) =
       latestOpenBillTransaction = await Transaction.findOne({
         where: {
           userId: userId,
-          payment_type: 'paylater',
-          confirmed: 1,
+          payment_type: {
+            [Sequelize.Op.in]: ['paylater', 'paylater/cash', 'paylater/cashless']
+          },
+          confirmed: {[Sequelize.Op.in]: [0,1]},
           is_paid: false
         },
         include: [
@@ -69,11 +71,11 @@ exports.checkTokenSocket = async (socket, token, shopIdThatOwnerOpen, ownerId) =
             model: DetailedTransaction,
           }
         ],
-        order: [['createdAt', 'DESC']], // Sort by createdAt to get the latest one
+        order: [['createdAt', 'DESC']],
       });
     }
     let cafe = null;
-    if(roleId == 2) {
+    if (roleId == 2) {
       cafe = await Cafe.findOne({
         where: {
           cafeId: cafeId,
@@ -83,7 +85,7 @@ exports.checkTokenSocket = async (socket, token, shopIdThatOwnerOpen, ownerId) =
     console.log(latestOpenBillTransaction)
     // Update the user socket information if necessary (You could use a userHelper for this as before)
     userHelper.updateUserSocketId({ userId, username, roleId, cafeId }, socket.id, shopIdThatOwnerOpen);
-    
+
     return socket.emit("checkUserTokenRes", {
       status: 200,
       message: "Token validated successfully",

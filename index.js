@@ -250,6 +250,7 @@ io.on("connection", async (socket) => {
             console.log(`Calculated discountEndDate (based on discountPeriods): ${calculatedEndDate.format('YYYY-MM-DD')}`);
           } else {
             console.log('No coupon found for this cafe owner.');
+              isExceededDeadline = true;
           }
         } else {
           console.log('Cafe not found.');

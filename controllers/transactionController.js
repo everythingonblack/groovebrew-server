@@ -490,13 +490,18 @@ exports.extentTransaction = async (req, res) => {
     include: [
       {
         model: DetailedTransaction,
+      },
+      {
+        model: Cafe,
+        attributes: ['ownerId'], // Only include the ownerId from the Cafe model
       }
     ],
-    attributes: ['transactionId', 'userId', 'cafeId', 'notes'], // Only include the ownerId from the Cafe model
+    attributes: ['transactionId', 'userId', 'cafeId', 'notes', 'confirmed', 'payment_type'], // Only include the ownerId from the Cafe model
   });
 
   if (!transaction) return res.status(404).json({ error: "Transaction not found" });
-  if (!req.user || transaction.userId != req.user.userId) return res.status(401).json({ error: "Unauthorized" });
+  if (!req.user || (transaction.userId != req.user.userId && transaction.cafeId != req.user.cafeId && transaction.dataValues.Cafe.ownerId != req.user.userId)) 
+  return res.status(401).json({ error: "Unauthorized" });
 
   const detailedTransactions = transaction.dataValues.DetailedTransactions;
   console.log(detailedTransactions)
@@ -512,7 +517,6 @@ exports.extentTransaction = async (req, res) => {
   try {
     await sequelize.transaction(async (t) => {
       // Add spacing and separator to the notes
-      transaction.payment_type = payment_type;
       if (transaction.notes != '') {
         const formattedNotes = `${transaction.notes}\n-----------------------------\n${notes}`;
 
@@ -550,11 +554,16 @@ exports.extentTransaction = async (req, res) => {
     userHelper.sendMessageToAllClerk(transaction.cafeId, "transaction_created", {
       cafeId: transaction.cafeId,
       transactionId: transactionId,
+      updatedAt: transaction.updatedAt
     });
 
-    const event = cafe.needsConfirmation
+    const event = (cafe.needsConfirmation || (transaction.payment_type == 'paylater' && transaction.confirmed == 0))
       ? "transaction_pending"
       : "transaction_confirmed";
+      console.log(transaction.confirmed)
+      console.log(transaction.payment_type)
+      console.log(cafe.needsConfirmation)
+      console.log(event)
     res.status(201).json({
       message: "Transactions created successfully",
     });
